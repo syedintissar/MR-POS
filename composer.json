@@ -9,6 +9,8 @@
         "php": "^8.3",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
+        "openspout/openspout": "^5.12",
+        "picqer/php-barcode-generator": "^3.3",
         "spatie/laravel-permission": "^8.3"
     },
     "require-dev": {

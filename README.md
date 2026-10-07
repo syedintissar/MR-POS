@@ -2,7 +2,7 @@
 
 A local-first POS, inventory, accounting, service/repair and shop management system. It is a Laravel 13 web app that runs on the shop's Windows server PC (Apache + PHP + MariaDB 11.4) and is used from browsers on the shop network. Normal operation never needs the internet.
 
-**Current status:** Phase 2 (foundation) complete and awaiting owner approval. Built: login and security, users, roles and permissions, settings (including printer and sales-tax settings), audit trail, document numbering, and the backup / restore system. Products, purchases, POS, customers, repair jobs and reports follow in Phases 3-8.
+**Current status:** Phase 3 (catalogue and inventory) complete and awaiting owner approval. Phase 2 (foundation) is committed. Built so far: login and security, users, roles and permissions, settings, audit trail, document numbering, backup / restore, products, categories, brands, units, suppliers, stock ledger and adjustments, Excel/CSV import and barcode labels. Purchases, POS, customers, repair jobs and reports follow in Phases 4-8.
 
 ## Quick start (developer / first install)
 ```powershell
@@ -30,5 +30,6 @@ Full instructions: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 | [docs/INSTALLATION.md](docs/INSTALLATION.md) | Windows setup, LAN access, firewall, scheduler, troubleshooting |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Staff guide (grows with each phase) |
 | [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md) | Phase 2 summary for the owner |
+| [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md) | Phase 3 summary for the owner |
 
 Windows helper scripts (Administrator PowerShell where noted) are in [deploy/windows](deploy/windows).

@@ -11,6 +11,7 @@ use App\Services\SettingsService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
 use ZipArchive;
 
 class BackupTest extends BackupTestCase
@@ -65,25 +66,18 @@ class BackupTest extends BackupTestCase
             $this->markTestSkipped('SystemRoot only matters on Windows.');
         }
 
-        // Regression: PHP's built-in server and some services start PHP without SystemRoot, and the database
-        // tools then fail with "Can't create TCP/IP socket (10106)".
-        $saved = ['SystemRoot' => getenv('SystemRoot'), 'windir' => getenv('windir')];
-        $serverSaved = [$_SERVER['SystemRoot'] ?? null, $_SERVER['windir'] ?? null, $_ENV['SystemRoot'] ?? null, $_ENV['windir'] ?? null];
-        putenv('SystemRoot');
-        putenv('windir');
-        unset($_SERVER['SystemRoot'], $_SERVER['windir'], $_ENV['SystemRoot'], $_ENV['windir']);
+        // Regression: PHP's built-in server and some services start PHP without SystemRoot, and the database tools then
+        // fail with "Can't create TCP/IP socket (10106)". This runs in a separate PHP process so the test runner's own
+        // environment is never touched.
+        $root = $this->sandbox.DIRECTORY_SEPARATOR.'worker-backups';
+        $result = Process::path(base_path())->timeout(180)->env([
+            'DB_DATABASE' => 'mrpos_test', 'DB_CONNECTION' => 'mariadb', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array',
+            'APP_ENV' => 'testing', 'BACKUP_DB_USERNAME' => '', 'BACKUP_DB_PASSWORD' => '',
+        ])->run([PHP_BINARY, base_path('tests/Support/backup_worker.php'), $root]);
 
-        try {
-            $this->assertFalse(getenv('SystemRoot'));
-            $b = $this->service()->create(Backup::TIER_MANUAL);
-            $this->assertSame(Backup::STATUS_SUCCESS, $b->status);
-            $this->assertSame('passed', $b->verify_status);
-        } finally {
-            foreach ($saved as $k => $v) {
-                putenv($v === false ? $k : "{$k}={$v}");
-            }
-            [$_SERVER['SystemRoot'], $_SERVER['windir'], $_ENV['SystemRoot'], $_ENV['windir']] = $serverSaved;
-        }
+        $out = trim($result->output());
+        $this->assertStringStartsWith('OK mrpos_', $out, 'The backup must work without SystemRoot. Got: '.$out.' '.$result->errorOutput());
+        $this->assertCount(1, glob($root.DIRECTORY_SEPARATOR.'manual'.DIRECTORY_SEPARATOR.'*.zip'));
     }
 
     public function test_uploaded_files_can_be_left_out_by_setting(): void

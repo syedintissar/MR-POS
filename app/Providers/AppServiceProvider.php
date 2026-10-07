@@ -4,7 +4,14 @@ namespace App\Providers;
 
 use App\Models\Backup;
 use App\Models\BackupDestination;
+use App\Models\Brand;
+use App\Models\Category;
+use App\Models\Product;
 use App\Models\Setting;
+use App\Models\StockAdjustment;
+use App\Models\StockMovement;
+use App\Models\Supplier;
+use App\Models\Unit;
 use App\Models\User;
 use App\Services\SettingsService;
 use App\Support\PermissionCatalogue;
@@ -38,6 +45,13 @@ class AppServiceProvider extends ServiceProvider
             'backup' => Backup::class,
             'backup_destination' => BackupDestination::class,
             'role' => Role::class,
+            'product' => Product::class,
+            'supplier' => Supplier::class,
+            'category' => Category::class,
+            'brand' => Brand::class,
+            'unit' => Unit::class,
+            'stock_adjustment' => StockAdjustment::class,
+            'stock_movement' => StockMovement::class,
         ]);
 
         $this->applySessionTimeout();

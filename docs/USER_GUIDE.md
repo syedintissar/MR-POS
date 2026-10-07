@@ -1,6 +1,6 @@
 # User Guide: Mr Printer & Tuner POS
 
-> **Status: growing with each phase.** Sections 1 and 10 are written (Phase 2). The others are filled in when their module is built; the phase is shown in brackets. The guide is written for shop staff in plain language.
+> **Status: growing with each phase.** Sections 1, 5, 6 (suppliers) and 10 are written (Phases 2 and 3). The others are filled in when their module is built; the phase is shown in brackets. The guide is written for shop staff in plain language.
 
 ## 1. Getting started
 
@@ -26,8 +26,65 @@
 
 ## 3. Customers & collecting payments [Phase 6]
 ## 4. Repair, service & refill jobs [Phase 7]
-## 5. Products & stock [Phase 3]
-## 6. Purchases & suppliers [Phase 4]
+## 5. Products & stock
+
+### Finding a product
+*Products.* Type in the search box: it looks in the name, SKU, barcode and model at once. Typing or scanning an exact SKU or barcode puts that product first. Use the filters for category, brand, stock level (in stock / low / out) and active or inactive.
+
+### Adding a product
+*Products → New product.* Choose **Stock item** for things you count (a toner) or **Service** for things you do not (repair labour). Fill in the name, category, unit and sale price. Everything else is optional.
+- **SKU:** leave it empty and the system gives the next number (P-000001). If you type one, use letters, digits and ordinary symbols only (no accented letters), because it can be printed as a barcode.
+- **Barcode:** click the box and scan the product, or type it. It must be different from every other product's barcode and SKU, otherwise the scanner could pick the wrong one.
+- **Stock you have now / Cost of each:** if you already hold the product, enter how many you have counted and what each cost you. This is recorded as *Opening stock*. Stock cannot be typed in again later: it changes through purchases, sales and adjustments, so there is always a record of why.
+- **Unit:** pieces, boxes, grams, millilitres and so on. Only units such as grams and ml accept decimals (for example 2.5 g of toner powder).
+- **Lowest allowed price** stops a cashier selling below it. **Warn me when stock is at or below** overrides the shop-wide low-stock level for this product.
+
+Managers see the **average cost** and **margin** on the product page. Cashiers and technicians never see cost or profit anywhere.
+
+### Changing prices
+Only people with the *change prices* permission can change a price. Everyone else sees the prices but cannot edit them. Every price change is recorded in the audit log with the old and the new price.
+
+### Deactivate or delete?
+- **Deactivate** hides the product from sales and pickers but keeps all its history in reports. Use this for products you no longer sell.
+- **Delete** is only possible for a product that never had any stock activity (for example one entered by mistake), and asks for your password.
+
+### Pictures
+Upload a PNG, JPG or WebP up to 2 MB on the product form. The system re-saves it as a smaller JPEG and keeps it safe on the server; it is included in every backup.
+
+### Categories, brands and units
+*Categories & brands.* Categories go two levels deep (for example *Printer Parts › Drums*). Anything in use cannot be deleted; untick *Active* to hide it. The unit **Allows decimals** setting cannot be turned off once products in that unit have stock history.
+
+### Importing your product list from Excel
+*Products → Import.*
+1. **Download the template** and fill in one product per row (only *name* is required). Common headers such as *price*, *cost* and *qty* are understood.
+2. Save as **.xlsx** or **.csv** and upload it. You get a **checked preview**: how many rows are ready, which new categories and brands will be created, and every problem with its row number.
+3. If there is any problem, **nothing is imported**. Fix the file and upload it again. When all rows are fine, press **Import**.
+4. Stock quantities in the file are recorded as one *Opening stock* document at the cost you gave. The import only **adds** products: a SKU or barcode that already exists is reported as an error.
+
+### Stock levels
+*Inventory → Stock* shows what is on the shelf, with counts of low and out-of-stock items (click a count to see them) and, for managers, the stock value. The dashboard also shows the products that need re-ordering.
+
+### The stock card
+*Inventory → Stock card* (or **Stock card** on a product) lists every movement: what happened, how much, the stock before and after, who did it and which document it came from. Entries can never be edited or deleted. If a total ever disagrees with its history, the system checks this twice a day and shows a red warning on the dashboard.
+
+### Adjusting stock
+*Inventory → Adjust stock.* Use it for your opening stock, a stock count, or damaged, lost or found items.
+1. Choose the **reason** and the date.
+2. Search for each product (name, SKU, or scan the barcode) and choose **Add** or **Remove** and the quantity. The screen shows what the stock will become and warns you if you try to remove more than you have.
+3. Press **Post adjustment**. All lines are saved together or not at all.
+
+A mistaken adjustment is cancelled, not deleted: open it and use **Cancel this adjustment** (administrators, with a reason and your password). The opposite movements are written, so the history shows both.
+
+### Barcode labels
+*Barcode labels.* Search for products, enter how many labels each needs (or **Fill with stock on hand**), choose the label size and press **Print labels**. The label uses the product's barcode, or its SKU if it has none. Set the printer's paper to the size shown on the page and margins to "None".
+## 6. Purchases & suppliers
+
+### Suppliers
+*Suppliers.* Add each supplier with name, company, phone, WhatsApp, email, address and NTN. A supplier gets a code (SUP-000001) automatically. You can deactivate a supplier; one that is used by a product cannot be deleted (administrators only). What you owe each supplier, supplier bills and payments arrive with *Purchases* in the next phase.
+
+### Entering supplier bills and receiving stock [Phase 4]
+### Paying suppliers [Phase 4]
+### Returning goods to a supplier [Phase 4]
 ## 7. Returns [Phase 8]
 ## 8. Expenses [Phase 8]
 ## 9. Reports & dashboard [Phase 8]

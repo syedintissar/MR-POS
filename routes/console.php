@@ -21,3 +21,6 @@ Schedule::command('pos:backup:retry-transfers')->everyFifteenMinutes()->withoutO
 
 // Tamper check of the audit trail.
 Schedule::command('pos:audit:verify')->dailyAt('02:30')->name('audit-verify');
+
+// Recompute cached stock totals from the ledger and report any difference (twice a day, in case the PC was off at night).
+Schedule::command('pos:integrity:check')->twiceDaily(2, 14)->name('integrity-check');

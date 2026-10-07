@@ -13,12 +13,41 @@
         </div>
     @endif
 
+    @if($integrity)
+        <div class="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div class="font-semibold">⚠ Stock records do not add up ({{ $integrity['total'] }} problem(s), checked {{ \Illuminate\Support\Carbon::parse($integrity['ran_at'])->diffForHumans() }})</div>
+            <ul class="mt-1 list-disc pl-5">@foreach(array_slice($integrity['problems'], 0, 3) as $p)<li>{{ $p }}</li>@endforeach</ul>
+            <p class="mt-1 text-xs">Nothing was changed automatically. Please ask your computer person to look at it; details are in the audit log.</p>
+        </div>
+    @endif
     <div class="mb-6">
         <h2 class="text-xl font-semibold text-slate-800">Welcome, {{ auth()->user()->name }}</h2>
         <p class="text-sm text-slate-500">{{ $shopName }} · signed in as {{ auth()->user()->roleName() }}</p>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        @if($stockAlerts)
+            <div class="card card-body sm:col-span-2 xl:col-span-1">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Stock alerts</div>
+                    <a href="{{ route('inventory.stock', ['level' => 'low']) }}" class="text-xs">See all</a>
+                </div>
+                <div class="mt-1 flex gap-6">
+                    <a href="{{ route('inventory.stock', ['level' => 'out']) }}" class="block"><span class="text-2xl font-semibold {{ $stockAlerts['out'] ? 'text-red-600' : 'text-slate-900' }}">{{ $stockAlerts['out'] }}</span><span class="block text-xs text-slate-500">out of stock</span></a>
+                    <a href="{{ route('inventory.stock', ['level' => 'low']) }}" class="block"><span class="text-2xl font-semibold {{ $stockAlerts['low'] ? 'text-amber-600' : 'text-slate-900' }}">{{ $stockAlerts['low'] }}</span><span class="block text-xs text-slate-500">running low</span></a>
+                </div>
+                @if($stockAlerts['items']->isNotEmpty())
+                    <ul class="mt-3 divide-y divide-slate-100 text-sm">
+                        @foreach($stockAlerts['items'] as $p)
+                            <li class="flex items-center justify-between gap-2 py-1.5"><a href="{{ route('products.show', $p) }}" class="truncate text-slate-800">{{ $p->name }}</a>
+                                <span class="shrink-0 {{ (float) $p->current_stock <= 0 ? 'font-semibold text-red-600' : 'text-amber-600' }}">{{ \App\Support\Decimal::trim($p->current_stock) }} {{ $p->unit->short_name }}</span></li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p class="mt-3 text-sm text-slate-500">Nothing is running low.</p>
+                @endif
+            </div>
+        @endif
         @can('backups.view')
             <div class="card card-body">
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Last good backup</div>
@@ -66,7 +95,7 @@
 
         <div class="card card-body xl:col-span-1">
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Coming next</div>
-            <p class="mt-1 text-sm text-slate-600">Products &amp; stock, purchases, POS, customers, repair jobs and reports are built in the next phases. Sales and profit figures will appear here.</p>
+            <p class="mt-1 text-sm text-slate-600">Products, stock and suppliers are ready. Purchases, the POS, customers, repair jobs and reports follow in the next phases, and their figures will appear here.</p>
         </div>
     </div>
 </x-layouts.app>

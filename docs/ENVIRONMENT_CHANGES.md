@@ -83,3 +83,15 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | **Apache not restarted**, so the web server's PHP does not have `intl` yet | It also serves your other projects | Restart Apache in the XAMPP Control Panel, then check the dashboard "System checks" card |
 | Apache virtual host, firewall rule, LAN access | Not requested yet / Administrator | `deploy\windows\httpd-vhosts.mrpos.conf`, `deploy\windows\setup-firewall.ps1` |
 | Old MariaDB 10.4 left running, unsecured (no root password, all interfaces) | Other projects depend on it | Options A/B/C in INSTALLATION.md §10 |
+
+---
+
+## 2026-10-07: Phase 3 additions
+
+| Change | Detail |
+|---|---|
+| Project packages | `openspout/openspout` 5.12 (reads/writes Excel files) and `picqer/php-barcode-generator` 3.3 (Code 128 barcodes) added with Composer. Both work offline. No change outside `D:\MR-POS` |
+| Real database `mrpos` | Backed up (`mrpos_2026-10-07_121950_manual.zip`), then migrated with the four Phase 3 migrations. After the drills it was reset to a clean install (0 users, 0 products). The drill backups were **moved, not deleted**, to `D:\_env_backups\mrpos-phase3-smoke` (6 files) |
+| Temporary files | `D:\_env_backups\2026-10-06_pre-phase2` and `mrpos-smoke-test` from Phase 2 are untouched. A temporary PHP development server on port 8099 was used for the HTTP checks and stopped afterwards |
+| MariaDB 11.4 | **Still a hand-started process** (not a Windows service). During the session the PC restarted once and MariaDB had to be started again by hand; it recovered cleanly. Run `deploy\windows\install-mariadb-service.ps1` as Administrator to make this permanent |
+| Not done | Windows service, scheduled task, Apache restart, firewall and vhost: all still need an Administrator (see the Phase 2 section above) |

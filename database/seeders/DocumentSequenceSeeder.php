@@ -21,6 +21,7 @@ class DocumentSequenceSeeder extends Seeder
         'stock_adjustment' => ['Stock adjustment', 'ADJ-'],
         'customer' => ['Customer code', 'CUS-'],
         'supplier' => ['Supplier code', 'SUP-'],
+        'product' => ['Product SKU (when left blank)', 'P-'],
     ];
 
     public function run(): void

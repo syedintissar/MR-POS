@@ -21,6 +21,20 @@
         ['label' => 'Backups', 'route' => 'backups.index', 'match' => 'backups.*', 'can' => 'backups.view', 'alert' => $backupAlert, 'icon' => 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4'],
         ['label' => 'Audit log', 'route' => 'audit.index', 'match' => 'audit.*', 'can' => 'audit_logs.view', 'icon' => 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'],
     ];
+    $catalogue = [
+        ['label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'can' => 'products.view', 'icon' => 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'],
+        ['label' => 'Categories & brands', 'route' => 'catalog.index', 'match' => 'catalog.*', 'can' => 'products.view', 'icon' => 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z'],
+        ['label' => 'Barcode labels', 'route' => 'labels.index', 'match' => 'labels.*', 'can' => 'products.view', 'icon' => 'M4 6h2v12H4zM8 6h1v12H8zM11 6h2v12h-2zM15 6h1v12h-1zM18 6h2v12h-2z'],
+    ];
+    $inventoryNav = [
+        ['label' => 'Stock', 'route' => 'inventory.stock', 'match' => 'inventory.stock', 'can' => 'inventory.view', 'icon' => 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4'],
+        ['label' => 'Stock card', 'route' => 'inventory.movements', 'match' => 'inventory.movements', 'can' => 'inventory.view', 'icon' => 'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4'],
+        ['label' => 'Adjustments', 'route' => 'adjustments.index', 'match' => 'adjustments.*', 'can' => 'inventory.view', 'icon' => 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4'],
+    ];
+    $purchasing = [
+        ['label' => 'Suppliers', 'route' => 'suppliers.index', 'match' => 'suppliers.*', 'can' => 'suppliers.view', 'icon' => 'M8 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h1m-1 0H9m4-10h3.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V16h-1'],
+    ];
+    $groups = ['' => $nav, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -47,29 +61,22 @@
         </a>
 
         <nav class="space-y-0.5">
-            @foreach($nav as $item)
-                @can($item['can'])
-                    <a href="{{ route($item['route']) }}" class="nav-link {{ request()->routeIs($item['match']) ? 'active' : '' }}">
-                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/></svg>
-                        {{ $item['label'] }}
-                    </a>
-                @endcan
+            @foreach($groups as $heading => $items)
+                @if(collect($items)->contains(fn ($i) => $user->can($i['can'])))
+                    @if($heading !== '')<div class="nav-heading">{{ $heading }}</div>@endif
+                    @foreach($items as $item)
+                        @can($item['can'])
+                            <a href="{{ route($item['route']) }}" class="nav-link {{ request()->routeIs($item['match']) ? 'active' : '' }}">
+                                <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/></svg>
+                                <span class="flex-1">{{ $item['label'] }}</span>
+                                @if(! empty($item['alert']))
+                                    <span class="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-red-500/30" title="Backup problem: open Backups"></span>
+                                @endif
+                            </a>
+                        @endcan
+                    @endforeach
+                @endif
             @endforeach
-
-            @if(collect($admin)->contains(fn ($i) => $user->can($i['can'])))
-                <div class="nav-heading">Administration</div>
-                @foreach($admin as $item)
-                    @can($item['can'])
-                        <a href="{{ route($item['route']) }}" class="nav-link {{ request()->routeIs($item['match']) ? 'active' : '' }}">
-                            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/></svg>
-                            <span class="flex-1">{{ $item['label'] }}</span>
-                            @if(! empty($item['alert']))
-                                <span class="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-red-500/30" title="Backup problem: open Backups"></span>
-                            @endif
-                        </a>
-                    @endcan
-                @endforeach
-            @endif
         </nav>
     </aside>
 

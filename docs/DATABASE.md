@@ -831,3 +831,34 @@ Rules: parts can be added only in `diagnosing … completed`. `Delivered` and `C
 - Payment methods, units, categories, service types, expense categories (SRS lists).
 - Document sequences with default prefixes.
 - Settings defaults (shop name "Mr Printer & Tuner", PKR, Rs., tax off, negative stock off, 80 mm receipts, backup 21:00, retention 7/4/6).
+
+---
+
+## 9. Phase 3 implementation notes (catalogue, suppliers, inventory)
+
+Tables added in Phase 3 (migrations `2026_10_07_2000xx_*`): `categories`, `brands`, `units`, `suppliers`, `products`, `stock_adjustments`, `stock_adjustment_items`, `stock_movements`. Differences from §2 above:
+
+| Item | As built | Why |
+|---|---|---|
+| `categories`, `brands`, `units` | **No soft deletes and no `slug`.** An unused row is deleted for real; a used one cannot be deleted (foreign key `RESTRICT`, plus a friendly message), only hidden with `is_active` | They hold no history of their own, and soft-deleted names would block re-using the name under the unique index |
+| `categories.unique(parent_id, name)` | Enforced for sub-categories by the index and for main categories by validation (MariaDB treats `NULL` parents as distinct) | |
+| `document_sequences` | New type `product` (prefix `P-`) for automatically suggested SKUs | SRS PRD-01 |
+| `suppliers.opening_balance` / `balance` | Columns exist, default 0, **not editable yet** | The supplier ledger that must back them arrives in Phase 4. A balance without a ledger entry would break the invariant in §5 |
+| `products` check constraints | `type IN ('stock','service')`, prices `>= 0`, costs `>= 0`, `type='stock' OR current_stock = 0` | The database refuses nonsense even if the application has a bug |
+| `products` cost/stock columns | `last_purchase_cost`, `average_cost`, `current_stock` are **not mass-assignable**; only `InventoryService` writes them | One write path (ARCHITECTURE §4.2) |
+| `stock_movements` | Append-only (`BEFORE UPDATE/DELETE` triggers) and `CHECK (qty_after = qty_before + quantity)`, `quantity <> 0`, `movement_type IN (...)` | Same protection as `audit_logs` |
+| Movement types | `opening, purchase, purchase_return, purchase_void, sale, sale_return, sale_void, service_consumption, service_return, adjustment_in, adjustment_out` (all 11 are accepted by the ledger now; Phases 4 to 8 start using them) | |
+| Unique SKU / barcode | Unique across soft-deleted rows too, so a deleted product's SKU stays reserved. A barcode may not equal another product's SKU and vice versa; both are plain printable ASCII | A scanner types the code and presses Enter: ambiguity or accents would pick the wrong product or print unreadable labels |
+
+### Costing rules as implemented (`CostingService`, 4-decimal moving weighted average)
+| Event | Effect on average cost |
+|---|---|
+| Stock in at a cost (purchase, opening stock, found/added, restocked return, voided sale) | `avg' = (max(S,0)·avg + q·c) / (max(S,0)+q)`. A negative balance never drags the average down |
+| Stock out at original cost (purchase return, void of a purchase, **void of an adjustment that added stock**) | `avg' = (S·avg − q·c) / (S − q)`, never below 0; unchanged if nothing remains |
+| Stock out at the current average (sale, repair part, adjustment out) | unchanged; the cost is snapshotted on the movement |
+
+### Integrity checks that exist now (`pos:integrity:check`, twice a day)
+1. `products.current_stock = Σ stock_movements.quantity` for every stock item.
+2. The latest movement's `qty_after` equals `current_stock`.
+
+A mismatch is never fixed automatically: it is written to the audit log, shown as a red warning on the dashboard for people who can adjust stock, and the command exits with code 1.

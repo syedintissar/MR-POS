@@ -123,3 +123,20 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P2-09 | Fortify and Pest (named in ARCHITECTURE) were not worth their weight | Hand-written login controller (fewer packages, full control of throttling and auditing) and plain PHPUnit. ARCHITECTURE.md updated |
 | P2-10 | The login page's failed attempts were attributed to the *account being attacked* in the audit log | Failed and refused logins now record the account as the subject and no actor |
 | P2-11 | The restore command's password prompt cannot be fed from a pipe (it reads the terminal) | Intended: a restore needs a person at the keyboard. Drills used the service directly |
+
+---
+
+## 6. Phase 3 findings
+
+| # | Finding | What was done |
+|---|---|---|
+| P3-01 | **Concurrency is real**: three cashiers can press "complete sale" on the last unit together. A test inside one PHP process cannot prove the locking works | Tests start separate PHP processes that hit the same product at the same instant. Exactly one of four buyers gets the last unit; opposite-order multi-product adjustments never deadlock. A "mutation check" (row lock removed on purpose) showed two buyers succeeding and deadlocks, so the test genuinely detects the problem |
+| P3-02 | A barcode containing accented letters was happily turned into a label, which a scanner cannot read reliably | SKUs and barcodes must be plain printable ASCII (no spaces in a barcode) in the form and in the import; label printing skips anything else with an explanation |
+| P3-03 | Excel's CSV export starts with a byte-order mark. Left in place it hides the quote of a quoted first header, so the "name" column was not recognised | The mark is removed before parsing. Covered by a test with BOM + semicolons + `Rs. 1,200` style numbers |
+| P3-04 | Blade pairs the first `@php` with the first `@endphp`, so an inline `@php(...)` before a block silently swallowed half the product list page. `view:cache` does not catch this, and only that page's test failed | A test compiles and parse-checks every view, and another forbids the risky ordering |
+| P3-05 | People without the "change prices" permission get read-only price boxes, which browsers do not submit, so their save was rejected | The server fills in the stored prices for them and ignores any price they might post |
+| P3-06 | Product costs could leak through pickers, JSON, labels, the import template or the dashboard | Nine screens are tested from both sides with an easy-to-spot cost: cashiers and technicians never see it, managers do; the lookup JSON has no cost or price field for anyone; a cost forged into an adjustment by someone who may not see costs is ignored |
+| P3-07 | Bulk import would have written thousands of audit rows and one stock document per product | One audit summary and one opening-stock document for the whole file; all-or-nothing (a failure on the last row also rolls back new categories and brands) |
+| P3-08 | Supplier balances cannot be correct without a ledger | The fields exist but are not editable until Phase 4 builds the supplier ledger |
+| P3-09 | A product's unit decides whether decimals are allowed, so changing it after stock exists could leave 2.5 pieces | The unit and the stock/service kind are locked once a product has stock history; a unit cannot stop allowing decimals while products with history use it |
+| P3-10 | Open questions Q6 (Excel data), barcodes and label printer were not answered | Defaults used: CSV/XLSX import with a downloadable template; labels generated from the barcode or SKU (Code 128) in three sizes, printed from the browser |
