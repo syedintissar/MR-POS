@@ -16,3 +16,4 @@ Thumbs.db
 /storage/*.log
 /storage/app/private
 /storage/app/scheduler-heartbeat
+jar*.txt
