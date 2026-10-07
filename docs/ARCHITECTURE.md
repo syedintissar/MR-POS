@@ -22,9 +22,9 @@ These drivers lead to a **modular monolith**: one Laravel application, one Maria
 |---|---|---|
 | Language | PHP **8.3+** (8.5.10 installed) | Laravel 13 requires ^8.3 |
 | Framework | **Laravel 13.x** (13.35 current) | Pin the exact minor version in `composer.lock` during Phase 2 |
-| Database | **MariaDB 10.11 LTS / 11.4 LTS** or **MySQL 8.0/8.4** | The installed XAMPP MariaDB **10.4.32 is end-of-life**; upgrade it. See DESIGN_REVIEW Q1. InnoDB, utf8mb4 |
+| Database | **MariaDB 11.4 LTS** (11.4.13 installed in Phase 2, port 3308, localhost only) | Owner decision Q1. The old XAMPP MariaDB 10.4.32 is end-of-life; it still runs side by side for other projects (see ENVIRONMENT_CHANGES.md). InnoDB, utf8mb4_unicode_ci, session time zone +05:00 |
 | Web server | Apache 2.4 (XAMPP) with a virtual host pointing to `public/` | Not `php artisan serve` (single-threaded, dev only) |
-| Auth | Laravel **Fortify** (headless) + our own Blade views | Registration disabled. Login throttling, password confirmation, optional 2FA later |
+| Auth | Laravel's own authentication (session guard) with a small hand-written login controller, `RateLimiter`, and Laravel's `password.confirm` middleware | Built in Phase 2 instead of Fortify: fewer packages, full control of throttling, audit entries and the inactive-user check. Registration does not exist. 2FA can be added later |
 | RBAC | **spatie/laravel-permission** | Roles and permissions tables, cached |
 | UI | Blade components + **Tailwind CSS v4** + **Alpine.js** | Built with Vite into `public/build`, no CDN |
 | Charts | Chart.js (npm, bundled) | |
@@ -32,12 +32,12 @@ These drivers lead to a **modular monolith**: one Laravel application, one Maria
 | Spreadsheet export | openspout/openspout (streaming XLSX) + native CSV | Low memory for large reports |
 | Barcodes | picqer/php-barcode-generator | SVG labels; scanners act as keyboards |
 | Off-site storage | league/flysystem-sftp-v3, league/flysystem-aws-s3-v3 (S3-compatible), optional rclone binary | All optional |
-| Queue | `database` driver | Worker run by the scheduler (see §7) |
+| Queue | `database` driver (configured, not used yet) | Off-site copies are retried by the scheduler (`pos:backup:retry-transfers`) instead of a queue worker; the queue stays available for later phases |
 | Cache / session | `database` session driver, `file` cache | No Redis needed for one shop |
-| Tests | Pest (PHPUnit) on a dedicated MariaDB test database | Not SQLite (locking, CHECK constraints and triggers must be real) |
-| Static analysis | Larastan (level 6+), Laravel Pint | Enforced before each phase is closed |
+| Tests | **PHPUnit 12** on a dedicated MariaDB schema `mrpos_test` | Not SQLite (locking, CHECK constraints and triggers must be real). Pest was dropped to keep dependencies minimal |
+| Code style | Laravel Pint (`vendor/bin/pint`) | Must pass before a phase is closed. Larastan is deferred to Phase 10 |
 
-PHP extensions required: `pdo_mysql, mbstring, bcmath, openssl, fileinfo, gd, zip, intl` (**intl is currently not enabled** in `C:\xampp\php\php.ini`; enable it in Phase 2), `curl`, `sodium` (optional).
+PHP extensions required: `pdo_mysql, mbstring, bcmath, openssl, fileinfo, gd, zip, intl, curl` (`sodium` recommended). `intl` and `sodium` were enabled in `C:/xampp/php/php.ini` in Phase 2. Run `php artisan pos:doctor`, and look at the dashboard "System checks" card, to see what the web server's PHP has loaded.
 
 ---
 
@@ -270,7 +270,7 @@ Laravel's scheduler needs `php artisan schedule:run` once a minute. On Windows t
 
 | Schedule | Command |
 |---|---|
-| every minute | `queue:work --stop-when-empty --max-time=55` (processes queued off-site transfers) |
+| every minute | heartbeat file (proves the scheduler is alive; the dashboard warns if it goes quiet for 10 minutes) |
 | every 15 min | `pos:backup:retry-transfers` (retries pending off-site copies when the destination is reachable) |
 | configurable (default 21:00) + catch-up check every 15 min | `pos:backup:run --tier=auto` |
 | optional every N hours in business hours | `pos:backup:run --tier=intraday` |
@@ -285,7 +285,7 @@ Laravel's scheduler needs `php artisan schedule:run` once a minute. On Windows t
 
 | Threat | Control |
 |---|---|
-| Credential guessing | Fortify rate limiting (username+IP), audit of failures, optional IP allow-list |
+| Credential guessing | `RateLimiter`: 5 failures per username+IP lock for 60 s, 30 per IP per 5 min; failures audited; optional IP allow-list |
 | Session theft on LAN | HttpOnly and SameSite=Lax cookies, session regeneration on login, idle timeout, optional local HTTPS (self-signed/mkcert) with `SESSION_SECURE_COOKIE=true` |
 | CSRF | Laravel CSRF middleware on all state-changing routes, including JSON POS endpoints (header token) |
 | SQL injection | Eloquent/query builder bindings only. Raw SQL only with bindings, reviewed in Phase 10 |

@@ -1,65 +1,101 @@
 # Installation & Deployment Guide
 
-> **Status: DRAFT (Phase 1).** The steps below reflect the agreed architecture. Exact commands, file names and screenshots are finalized and tested in Phase 10. Items marked *(Phase N)* do not exist yet.
+> **Status: tested in Phase 2** on the shop PC (Windows 10 Pro, XAMPP PHP 8.5, MariaDB 11.4.13). Printer and thermal-receipt specifics are finalized in Phase 5. Every change made to this PC so far is listed in [ENVIRONMENT_CHANGES.md](ENVIRONMENT_CHANGES.md).
 
-**Target:** one Windows 10/11 PC as the server ("Server PC"), with other PCs and tablets on the same LAN as terminals.
+**Target:** one Windows 10/11 PC as the server ("Server PC"), with other PCs and tablets on the same LAN as browser terminals. Nothing in normal operation needs the internet.
 
 ---
 
 ## 1. Hardware & network recommendations
 - Server PC: Intel i5 or better, 8 GB RAM, **SSD**, a second disk or USB drive for backups, and a **UPS** (protects the database during load-shedding).
-- A wired connection for the Server PC. Give it a **static IP**, either in Windows adapter settings or as a DHCP reservation on the router (e.g. `192.168.1.10`).
-- A password-protected Wi-Fi (WPA2/WPA3) if tablets are used. Do not put customer guest Wi-Fi on the same network.
+- A wired connection for the Server PC and a **fixed IP address** (Windows adapter settings, or a DHCP reservation on the router), for example `192.168.1.10`.
+- Password-protected Wi-Fi (WPA2/WPA3) if tablets are used. Keep customer guest Wi-Fi on a different network.
 
-## 2. Software stack (option A: XAMPP, the currently installed stack)
+## 2. Software
+
 | Component | Version | Notes |
 |---|---|---|
-| XAMPP (Apache + PHP) | PHP 8.3+ (8.5 installed) | `C:\xampp` |
-| Database | **MariaDB 11.4 LTS** (recommended) or the XAMPP-bundled MariaDB 10.4 (EOL; dev only) | See DESIGN_REVIEW Q1 |
-| Composer | 2.x | installed |
-| Node.js | 20+ (24 installed) | Only needed to build assets. Not needed at runtime |
-| Git | any | installed |
+| PHP + Apache | XAMPP, PHP 8.3 or newer (8.5.10 installed) | `C:\xampp` |
+| Database | **MariaDB 11.4 LTS** (11.4.13 installed) | Portable build in `C:\mariadb-11.4`, port **3308**, localhost only |
+| Composer | 2.x | |
+| Node.js | 20+ | Only to build the page styles; not needed while the shop is running |
 
-Option B (Laragon with MySQL 8.4) works the same way; the paths differ.
+### 2.1 PHP (`C:\xampp\php\php.ini`)
+Required extensions (no leading `;`): `intl`, `zip`, `gd`, `mbstring`, `bcmath`, `fileinfo`, `openssl`, `pdo_mysql`, `curl`. Recommended: `sodium`.
+Settings used: `memory_limit = 512M`, `upload_max_filesize = 128M`, `post_max_size = 128M`, `max_execution_time = 600`.
 
-### 2.1 PHP configuration (`C:\xampp\php\php.ini`)
-Enable these extensions (remove the leading `;`): `intl`, `zip`, `gd`, `mbstring`, `bcmath`, `fileinfo`, `openssl`, `pdo_mysql`, `curl`, `sodium`.
-Settings: `memory_limit = 512M`, `upload_max_filesize = 64M`, `post_max_size = 64M`, `max_execution_time = 120`, `date.timezone = Asia/Karachi`, `opcache.enable = 1`.
+**Apache must be restarted after any `php.ini` change** (XAMPP Control Panel → Apache → Stop, Start). The command line and Apache read the same file but only Apache's running copy needs the restart. To confirm, open the dashboard as an administrator and look at the **System checks** card (it shows what the *web server's* PHP has loaded), or run `php artisan pos:doctor` for the command line.
 
-### 2.2 Database
-1. Install MariaDB 11.4 LTS as a Windows service. Set a strong root password and leave port 3306.
-2. In `my.ini`, under `[mysqld]`: `bind-address = 127.0.0.1`, `character-set-server = utf8mb4`, `collation-server = utf8mb4_unicode_ci`, `innodb_flush_log_at_trx_commit = 1`, `default-time-zone = '+05:00'`.
-3. Create the schemas and users (passwords are examples; generate your own):
+### 2.2 MariaDB 11.4
+
+The PC already had XAMPP's MariaDB 10.4 (end-of-life) holding other projects' databases, so 11.4 was installed **next to it** instead of replacing it. See §10 for the cutover choice.
+
+Install on a fresh PC (no administrator rights needed for these steps):
+1. Download `mariadb-11.4.x-winx64.zip` from mariadb.org and check its SHA-256 against the published value.
+2. Unzip into `C:\mariadb-11.4`.
+3. Create `C:\mariadb-11.4\my.ini`:
+   ```ini
+   [mysqld]
+   basedir=C:/mariadb-11.4
+   datadir=C:/mariadb-11.4/data
+   port=3308
+   bind-address=127.0.0.1
+   character-set-server=utf8mb4
+   collation-server=utf8mb4_unicode_ci
+   default-time-zone='+05:00'
+   innodb_flush_log_at_trx_commit=1
+   sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+   max_allowed_packet=64M
+   log_error=C:/mariadb-11.4/data/mariadb-error.log
+   [client]
+   port=3308
+   default-character-set=utf8mb4
+   ```
+4. Initialise with a root password of your choice and start the server:
+   ```powershell
+   C:\mariadb-11.4\bin\mariadb-install-db.exe --datadir=C:/mariadb-11.4/data --password=<ROOT-PASSWORD>
+   C:\mariadb-11.4\bin\mariadbd.exe --defaults-file=C:\mariadb-11.4\my.ini --standalone
+   ```
+5. **Make it start with Windows** (needs an Administrator PowerShell): `deploy\windows\install-mariadb-service.ps1`. Until you do this, MariaDB 11.4 only runs while the process started in step 4 is alive, and the POS cannot open after a reboot.
+
+### 2.3 Databases and accounts
+Run in the MariaDB client as root (`C:\mariadb-11.4\bin\mariadb.exe --user=root -p --port=3308 --host=127.0.0.1`). Generate your own passwords:
 ```sql
-CREATE DATABASE mrpos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'mrpos_app'@'localhost' IDENTIFIED BY '<strong-password-1>';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES, TRIGGER,
-      CREATE TEMPORARY TABLES, LOCK TABLES ON mrpos.* TO 'mrpos_app'@'localhost';
+CREATE DATABASE mrpos        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE mrpos_verify CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;  -- scratch area where "Test restore" proves a backup works
+CREATE USER 'mrpos_app'@'localhost'    IDENTIFIED BY '<APP-PASSWORD>';
+CREATE USER 'mrpos_app'@'127.0.0.1'    IDENTIFIED BY '<APP-PASSWORD>';
+CREATE USER 'mrpos_backup'@'localhost' IDENTIFIED BY '<BACKUP-PASSWORD>';
+CREATE USER 'mrpos_backup'@'127.0.0.1' IDENTIFIED BY '<BACKUP-PASSWORD>';
 
--- backup / verify user
-CREATE USER 'mrpos_backup'@'localhost' IDENTIFIED BY '<strong-password-2>';
-GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON mrpos.* TO 'mrpos_backup'@'localhost';
-GRANT ALL PRIVILEGES ON mrpos_verify.* TO 'mrpos_backup'@'localhost';
+GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,INDEX,DROP,REFERENCES,TRIGGER,CREATE TEMPORARY TABLES,LOCK TABLES
+      ON mrpos.* TO 'mrpos_app'@'localhost','mrpos_app'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON mrpos_verify.* TO 'mrpos_app'@'localhost','mrpos_app'@'127.0.0.1';
+GRANT SELECT,SHOW VIEW,TRIGGER,LOCK TABLES,EVENT
+      ON mrpos.* TO 'mrpos_backup'@'localhost','mrpos_backup'@'127.0.0.1';   -- read-only: used for the dump
+FLUSH PRIVILEGES;
 ```
-The restore uses `mrpos_app`, which can drop and create tables in `mrpos`. A separate test database `mrpos_test` is used by automated tests on development machines only.
+Also remove the sample database MariaDB creates: `DROP DATABASE IF EXISTS test;` and revoke the `test` privileges from PUBLIC.
 
-## 3. Application installation *(Phase 2+)*
+**Development machines only** (to run the automated tests): `CREATE DATABASE mrpos_test ...;` with `GRANT ALL ON mrpos_test.* TO 'mrpos_app'@...` and `GRANT SELECT,SHOW VIEW,TRIGGER,LOCK TABLES,EVENT ON mrpos_test.* TO 'mrpos_backup'@...`. Never create it on the shop's live server.
+
+## 3. Install the application
 ```powershell
-cd D:\
-git clone <repo> MR-POS          # or copy the release folder
 cd D:\MR-POS
 composer install --no-dev --optimize-autoloader
 copy .env.example .env
 php artisan key:generate
 # edit .env (section 4)
-npm ci; npm run build            # only if public/build is not shipped with the release
-php artisan migrate --force
-php artisan pos:install          # seeds roles/permissions/settings, creates the admin (prompts for password)
-php artisan storage:link         # only for public assets; uploads stay private
-php artisan config:cache; php artisan route:cache; php artisan view:cache; php artisan event:cache
+npm ci
+npm run build
+php artisan pos:install        # migrates, loads roles/permissions/numbering, asks for the first Admin's password
+php artisan pos:doctor         # everything required must say OK
 ```
+`pos:install` can be run again safely. There is **no default password**: the first administrator chooses theirs.
 
-## 4. `.env` essentials
+> Development note: `composer.json` sets `optimize-autoloader` to `false` because the optimized scan is very slow while antivirus checks every file. Production installs pass `--optimize-autoloader` as above.
+
+## 4. `.env` essentials (production)
 ```
 APP_NAME="Mr Printer & Tuner"
 APP_ENV=production
@@ -67,92 +103,96 @@ APP_DEBUG=false
 APP_URL=http://192.168.1.10
 APP_TIMEZONE=Asia/Karachi
 
-DB_CONNECTION=mariadb            # or mysql
+DB_CONNECTION=mariadb
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=3308
 DB_DATABASE=mrpos
 DB_USERNAME=mrpos_app
-DB_PASSWORD=...
+DB_PASSWORD=<APP-PASSWORD>
+DB_TIMEZONE=+05:00
 
 SESSION_DRIVER=database
 SESSION_LIFETIME=480
 SESSION_SECURE_COOKIE=false      # true only when HTTPS is enabled
-QUEUE_CONNECTION=database
 CACHE_STORE=file
+QUEUE_CONNECTION=database
 
 BACKUP_DB_USERNAME=mrpos_backup
-BACKUP_DB_PASSWORD=...
-BACKUP_MYSQLDUMP_PATH="C:\Program Files\MariaDB 11.4\bin\mysqldump.exe"
-BACKUP_MYSQL_PATH="C:\Program Files\MariaDB 11.4\bin\mysql.exe"
+BACKUP_DB_PASSWORD=<BACKUP-PASSWORD>
+# Leave the next two empty to auto-detect MariaDB 11.4, then XAMPP, then Laragon:
+BACKUP_MYSQLDUMP_PATH=
+BACKUP_MYSQL_PATH=
+BACKUP_VERIFY_DATABASE=mrpos_verify
+# BACKUP_ROOT=E:\MRPOS-Backups    # a second physical disk is recommended
 ```
+`.env` holds secrets. It is never committed to git and is **not** inside backups: keep a copy of the `APP_KEY` line somewhere safe (the Recovery Kit), because stored backup passwords and destination credentials are encrypted with it.
 
-## 5. Apache virtual host & LAN access
-`C:\xampp\apache\conf\extra\httpd-vhosts.conf`:
-```apache
-<VirtualHost *:80>
-    ServerName mrpos.local
-    ServerAlias 192.168.1.10
-    DocumentRoot "D:/MR-POS/public"
-    <Directory "D:/MR-POS/public">
-        AllowOverride All
-        Require all granted
-    </Directory>
-    <Directory "D:/MR-POS/storage">
-        Require all denied
-    </Directory>
-</VirtualHost>
-```
-- In XAMPP Control Panel → Config, install **Apache** and the **database** as services (the "Svc" checkboxes), so they start on boot.
-- Optional friendly name: on each terminal, add `192.168.1.10  mrpos.local` to `C:\Windows\System32\drivers\etc\hosts`.
+## 5. Web server and LAN access
+1. Copy the contents of `deploy\windows\httpd-vhosts.mrpos.conf` into `C:\xampp\apache\conf\extra\httpd-vhosts.conf`, change `192.168.1.10` to the Server PC's IP, and make sure `mod_rewrite`, `mod_headers` and the `Include conf/extra/httpd-vhosts.conf` line are active in `httpd.conf`.
+2. Install Apache as a Windows service so it starts with the PC: XAMPP Control Panel → the **Svc** box next to Apache (administrator).
+3. Restart Apache.
+4. **Firewall** (Administrator PowerShell): `deploy\windows\setup-firewall.ps1`. It allows port 80 from the local subnet on *Private* networks only, tells you if the network is set to *Public*, and warns if any rule exposes a database port.
+5. Optional friendly name: on each terminal add `192.168.1.10  mrpos.local` to `C:\Windows\System32\drivers\etc\hosts`.
+6. Open `http://192.168.1.10` from another PC and log in.
 
-### 5.1 Windows Firewall (run PowerShell as Administrator on the Server PC)
-```powershell
-New-NetFirewallRule -DisplayName "MR-POS HTTP (LAN)" -Direction Inbound -Protocol TCP -LocalPort 80 `
-  -Profile Private -RemoteAddress LocalSubnet -Action Allow
-# Make sure the network is set to Private:
-Get-NetConnectionProfile
-Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private
-```
-**Do not** open port 3306.
+Optional HTTPS on the LAN (recommended if Wi-Fi tablets are used): create a certificate with `mkcert`, configure Apache SSL, install the mkcert root certificate on each terminal, set `APP_URL=https://…` and `SESSION_SECURE_COOKIE=true`, and open port 443.
 
-### 5.2 Optional HTTPS on the LAN
-Generate a certificate with `mkcert` for `mrpos.local` and `192.168.1.10`, configure Apache SSL, install the mkcert root CA on each terminal, set `APP_URL=https://…` and `SESSION_SECURE_COOKIE=true`, and add a firewall rule for 443.
+## 6. Scheduler (automatic backups depend on it)
+Windows Task Scheduler must run `php artisan schedule:run` every minute. Run `deploy\windows\install-scheduler.ps1`:
+- **Administrator PowerShell, with `-RunAsSystem`** (recommended): runs at startup whether or not anyone is logged in.
+- Normal PowerShell, no switch: runs as you, only while you are logged in.
 
-## 6. Scheduler & queue (backups depend on this) *(Phase 2/9)*
-Create a Task Scheduler task (an XML template will be provided in `deploy/windows/MRPOS-Scheduler.xml`):
-- Trigger: **At startup**, repeat **every 1 minute** indefinitely.
-- Action: `C:\xampp\php\php.exe` with arguments `D:\MR-POS\artisan schedule:run`, start in `D:\MR-POS`.
-- "Run whether user is logged on or not", "Run with highest privileges" off, run as the same account as the Apache service.
-- Verify: Admin → Backups shows "Scheduler heartbeat: OK".
+Until this is done the dashboard shows a red warning that the scheduled-task runner is not running, because backups would otherwise silently never happen. Two minutes after registering, the warning clears.
 
 ## 7. Terminal setup (each counter PC)
-- Chrome or Edge, with a bookmark or shortcut to `http://192.168.1.10/pos`.
-- Install the thermal printer driver, set paper to 80 mm, and enable "open cash drawer" in the driver if available.
-- Optional one-click printing: a shortcut such as `msedge.exe --kiosk-printing http://192.168.1.10/pos` prints to the **default** printer without a dialog. Set the thermal printer as the Windows default on that terminal.
-- Set browser zoom so the POS fits the screen (100% at 1366×768 or larger).
+- Chrome or Edge with a shortcut to `http://192.168.1.10`.
+- Install the thermal printer's Windows driver and set it as the Windows **default printer** on that PC. Paper width, margins, font size, copies and automatic printing are configured in *Settings → Printing*; the receipts themselves arrive in Phase 5.
+- Optional one-click printing with no print dialog: start the browser with `--kiosk-printing`, for example `msedge.exe --kiosk-printing http://192.168.1.10`.
 
-## 8. Backups *(Phase 9)*
-See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). At install:
-1. Admin → Backups → Settings: confirm the time (21:00), retention, and the backup folder (second disk if available).
-2. Add a `local_path` destination (USB drive or `\\OTHER-PC\MRPOS-Backups`) → Test.
-3. Optional cloud destination (encryption required).
-4. Click **Backup Now** → wait for success → **Verify (deep)**.
-5. Print the Recovery Kit and store it off-site.
+## 8. Backups
+See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). On a new install:
+1. Log in as the administrator → **Backups** → **Backup Now**, then **Test restore** on it (this proves it can be restored).
+2. Add a second destination: a USB drive (`F:\MRPOS-Backups`) or another PC's share (`\\COUNTER2\MRPOS-Backups`). Rotate two USB drives, one kept off-site.
+3. Check the schedule (default 21:00 daily) and retention (7 daily, 4 weekly, 6 monthly).
+4. Optional: turn on AES-256 encryption and write the backup password down away from the shop.
+5. Cloud destinations (Google Drive, S3, SFTP) arrive in Phase 9; the system is built to take them.
 
 ## 9. Restore
-Use the web UI (Admin → Backups → Restore) or, if the app cannot start:
+From the server PC, in a terminal in `D:\MR-POS`:
 ```powershell
-cd D:\MR-POS
-php artisan pos:backup:restore "F:\MRPOS-Backups\mrpos_2026-10-06_2100_daily.zip"
+php artisan pos:backup:list
+php artisan pos:backup:restore --id=<number>          # or:  php artisan pos:backup:restore F:\MRPOS-Backups\manual\mrpos_....zip
 ```
-Full procedure: [BACKUP_RESTORE.md §12](BACKUP_RESTORE.md#12-restore-procedure).
+It asks for an administrator login and a typed confirmation, tests the backup first, makes a safety copy of the current data, and rolls back automatically if anything fails. Full procedure, including a replacement PC: [BACKUP_RESTORE.md §12](BACKUP_RESTORE.md#12-restore-procedure).
 
-## 10. Updating the application *(Phase 10)*
-`php artisan pos:upgrade` puts the app in maintenance mode, takes a **safety backup**, pulls or copies the new release, runs `composer install --no-dev`, migrates, clears and rebuilds caches, and brings the app back up.
+## 10. Decision pending: the old MariaDB 10.4 server
+XAMPP's MariaDB 10.4 still runs on port 3306 and holds four other projects' databases (`mis_erp`, `nexus`, `updated_dfms`, `bajk_banking`). It is end-of-life, listens on **every network interface** and its `root` user has **no password**. MR-POS does not use it. The other databases were copied into 11.4 and compared table by table with identical results, so they *can* move, but the applications that use them have not been tested on 11.4. Options:
 
-## 11. Troubleshooting (to be expanded)
+| Option | What it means |
+|---|---|
+| A. Leave it | Nothing changes for the other projects. Secure it anyway: give `root` a password and set `bind-address=127.0.0.1` in `C:\xampp\mysql\bin\my.ini`, then update the other projects' `.env` files |
+| B. Move the other projects to 11.4 | Test each application against 11.4 (port 3308) first, repoint their `.env`, then retire 10.4. A copy of every database is kept in `D:\_env_backups\2026-10-06_pre-phase2` |
+| C. Move MR-POS to port 3306 | Only after the old server is retired (B), by changing `port` in `my.ini` and the `.env` files |
+
+## 11. Updating the application
+Today: take a backup (**Backup Now**), copy the new release over `D:\MR-POS` (keep `.env` and `storage`), then `composer install --no-dev --optimize-autoloader`, `npm ci && npm run build`, `php artisan migrate --force`, `php artisan optimize:clear`. A one-command `pos:upgrade` that does the safety backup automatically arrives in Phase 10.
+
+## 12. Troubleshooting
+
 | Symptom | Check |
 |---|---|
-| Terminals can't reach the app | Server IP unchanged? Firewall rule Private + LocalSubnet? Network profile Private? Apache service running? |
-| "Backup overdue" warning | Task Scheduler task enabled? Heartbeat age? `storage/logs/laravel.log` |
-| Slow POS search | Run `php artisan optimize`; check the disk is an SSD and antivirus excludes `D:\MR-POS` and the DB data folder |
+| Other computers cannot open the site | Server IP unchanged? Firewall rule present and the network set to *Private*? Apache running? Try `http://<server-ip>` on the server itself first |
+| Page says the database is unreachable | Is MariaDB 11.4 running (port 3308)? `php artisan pos:doctor`. After a reboot it only starts automatically once `install-mariadb-service.ps1` has been run |
+| Red "Backup problem" dot / banner | Open **Backups**: each warning says what to fix. "Scheduled-task runner is not running" means §6 has not been done |
+| A backup fails with `Can't create TCP/IP socket (10106)` | Fixed in Phase 2 (SystemRoot is passed to the tools). If it ever returns, run `php artisan pos:doctor` and check the antivirus is not blocking `mariadb-dump.exe` |
+| Dashboard "System checks" shows a missing PHP extension | Enable it in `php.ini` and **restart Apache** |
+| Times are five hours off | `APP_TIMEZONE=Asia/Karachi` and `DB_TIMEZONE=+05:00` in `.env`, then `php artisan config:clear` |
+| Slow pages | `php artisan optimize`; exclude `D:\MR-POS` and the MariaDB data folder from antivirus real-time scanning |
+
+## 13. Running the automated tests (developers)
+```powershell
+cd D:\MR-POS
+vendor\bin\phpunit          # about 3 minutes; uses the mrpos_test schema, never the live database
+vendor\bin\pint --test      # code style
+```
+The test suite refuses to run unless the connected database is named `mrpos_test`.

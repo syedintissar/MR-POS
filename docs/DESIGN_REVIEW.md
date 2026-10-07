@@ -78,6 +78,22 @@ These do not block Phase 2; the default is used until the owner answers.
 
 ---
 
+## 3a. Owner decisions (recorded 2026-10-06, before Phase 2)
+
+The owner reviewed §3 and decided as follows. These supersede the defaults above.
+
+| # | Decision | Design consequence |
+|---|---|---|
+| Q1 | **Upgrade MariaDB 10.4.32 → 11.4 LTS.** Back up existing data first and verify compatibility. | The project targets MariaDB 11.4 LTS. Environment work is logged in [ENVIRONMENT_CHANGES.md](ENVIRONMENT_CHANGES.md). The existing 10.4 server also holds other databases (see that file), so the cutover is staged. |
+| Q2 | **Not registered for sales tax for now,** but tax must be enable-able later from Settings with no code change. | `tax.enabled = false` by default. Rate, label, inclusive/exclusive and per-product override are all settings or product fields. Sale, return and purchase code paths always carry tax columns (zero while disabled). Phase 2 ships the settings. POS use starts in Phase 5. |
+| Q4 | **Printer model not final.** Support common 80 mm thermal printers generically and make everything configurable. | Settings group `printing`: printer name/model (label only), paper width (58/80 mm/A4), margins, copies, header, footer, show logo, auto-print on sale, auto-print on job intake. Output is browser-printed HTML, so any driver-installed printer works. |
+| Q5 | **Local automatic backup + optional off-site/cloud.** The destination must stay configurable. Backups must cover all critical POS data, and a restore procedure must be tested. | Phase 2 delivers a working backup, verification and **tested restore** at the command line, so data is protected from day one (including DB dump, uploaded files and `.env`-independent manifest). Destinations (`backup_destinations`) are pluggable. The full engine and UI follow in Phase 9. |
+| Q8 | **Managers and admins see cost, profit and margin. Cashiers and sales staff must not.** | Already the default in [RBAC.md](RBAC.md). Phase 2 adds a test asserting the Cashier and Technician roles lack `products.view_cost`, `reports.profit` and `dashboard.financials`. Enforced server-side in later phases, including exports and JSON. |
+
+Other owner instructions for Phase 2: `git init` first, initial commit before major changes, enable and verify PHP `intl`, take a backup before any destructive DB or environment change, stay local-first, never ignore backup failures (they must be reported clearly), and document every environment change.
+
+---
+
 ## 4. Cross-document consistency check
 
 | Check | Result |
@@ -89,3 +105,21 @@ These do not block Phase 2; the default is used until the owner answers.
 | Every cache column has an integrity-check invariant | ✅ (DATABASE §5, invariants 1–8) |
 | Every requested test workflow appears in SRS §5 | ✅ 17/17, plus a rollback test |
 | Brief's expected entity list is covered | ✅ All present. Added: units, document_sequences, held_sales, service_types, service_job_payments, stock_adjustments(+items), customer/supplier ledger entries, purchase_return_items, backup_destinations, backup_transfers, backup_restores |
+
+---
+
+## 5. Phase 2 findings (what building it taught us)
+
+| # | Finding | What was done |
+|---|---|---|
+| P2-01 | The old XAMPP MariaDB 10.4 server also holds four **other projects'** databases, has **no root password** and listens on **all network interfaces**. The brief only mentioned upgrading the database | MR-POS runs on a new MariaDB 11.4 beside it. Everything was backed up first; the other databases were copied to 11.4 and matched table-by-table. Replacing 10.4 is left to the owner (INSTALLATION.md §10) |
+| P2-02 | Laravel 13 ships `config/app.php` with the time zone hard-coded to UTC and ignores `APP_TIMEZONE`, while MariaDB ran on +05:00. Stored times and the "21:00" backup would have been five hours apart | PHP and the database connection now share Asia/Karachi (+05:00). Regression tests assert that both clocks agree |
+| P2-03 | Under PHP's built-in server (and some services) the backup tools failed with Windows error 10106 because the child process had no `SystemRoot` | It is always passed explicitly now. The error was reproduced in a test and the failure was reported correctly on screen, in the audit log and in the history |
+| P2-04 | Restoring onto an empty database (replacement PC) tried to make a "safety backup" of data that does not exist, and failed | Skipped when the database has no tables; all other cases still require the safety backup |
+| P2-05 | A dump taken while a backup is running contains that backup's own "running" row, which would look like an interrupted failure after a restore | Such rows are dropped after a restore and the real file is re-registered from disk |
+| P2-06 | Two administrators demoting each other at the same moment could both pass the "keep one admin" check | The check now runs inside a transaction that locks the admin rows |
+| P2-07 | `alpha_dash` rejects dots, but usernames like `ali.raza` are natural | Usernames may contain letters, numbers, dot, dash and underscore |
+| P2-08 | Laravel calls `afterRefreshingDatabase()` before *every* test, so seeding there re-created 91 permissions each time (57 s for 19 tests) | Seeding hooks into the one-time migration step (8 s for the same tests) |
+| P2-09 | Fortify and Pest (named in ARCHITECTURE) were not worth their weight | Hand-written login controller (fewer packages, full control of throttling and auditing) and plain PHPUnit. ARCHITECTURE.md updated |
+| P2-10 | The login page's failed attempts were attributed to the *account being attacked* in the audit log | Failed and refused logins now record the account as the subject and no actor |
+| P2-11 | The restore command's password prompt cannot be fed from a pipe (it reads the terminal) | Intended: a restore needs a person at the keyboard. Drills used the service directly |

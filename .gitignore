@@ -12,3 +12,7 @@
 /.idea
 /.vscode
 Thumbs.db
+/storage/framework/testing
+/storage/*.log
+/storage/app/private
+/storage/app/scheduler-heartbeat

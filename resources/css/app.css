@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    /* System fonts only: the shop PC may be offline, so nothing is loaded from the internet. */
+    --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+    --color-brand-50: #eef6ff;
+    --color-brand-100: #d9eaff;
+    --color-brand-500: #2563eb;
+    --color-brand-600: #1d4ed8;
+    --color-brand-700: #1e40af;
+    --color-brand-900: #172554;
+}
+
+[x-cloak] { display: none !important; }
+
+@layer base {
+    body { @apply bg-slate-100 text-slate-800 antialiased; }
+    a { @apply text-brand-600; }
+    a:hover { @apply text-brand-700; }
+}
+
+@layer components {
+    /* Buttons */
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60; }
+    .btn-primary { @apply bg-brand-600 text-white hover:bg-brand-700; }
+    .btn-secondary { @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+    .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+    .btn-sm { @apply px-2.5 py-1 text-xs; }
+    a.btn-primary, a.btn-primary:hover, a.btn-danger, a.btn-danger:hover { @apply text-white; }
+    a.btn-secondary, a.btn-secondary:hover { @apply text-slate-700; }
+
+    /* Forms */
+    .label { @apply mb-1 block text-sm font-medium text-slate-700; }
+    .input { @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100; }
+    .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500; }
+    .help { @apply mt-1 text-xs text-slate-500; }
+    .error-text { @apply mt-1 text-xs font-medium text-red-600; }
+
+    /* Surfaces */
+    .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; }
+    .card-body { @apply p-5; }
+    .card-header { @apply flex items-center justify-between border-b border-slate-200 px-5 py-3; }
+    .card-title { @apply text-sm font-semibold text-slate-800; }
+
+    /* Tables */
+    .table { @apply min-w-full divide-y divide-slate-200 text-sm; }
+    .table thead th { @apply bg-slate-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+    .table tbody td { @apply px-4 py-2.5 align-middle; }
+    .table tbody tr { @apply border-b border-slate-100 hover:bg-slate-50/60; }
+
+    /* Badges */
+    .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+    .badge-green { @apply bg-emerald-100 text-emerald-800; }
+    .badge-red { @apply bg-red-100 text-red-800; }
+    .badge-amber { @apply bg-amber-100 text-amber-800; }
+    .badge-blue { @apply bg-blue-100 text-blue-800; }
+    .badge-gray { @apply bg-slate-100 text-slate-700; }
+
+    /* Sidebar */
+    .nav-link { @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white; }
+    .nav-link.active { @apply bg-white/15 text-white; }
+    .nav-heading { @apply px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500; }
+
+    .spinner { @apply inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent align-[-2px]; }
+}

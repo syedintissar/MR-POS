@@ -64,7 +64,7 @@
 Seeded with: Cash, Bank Transfer, Card, Easypaisa, JazzCash, Cheque, Customer Credit.
 
 **document_sequences**
-| id | doc_type varchar(30) UNIQUE | prefix varchar(20) | next_number BIGINT UNSIGNED | padding tinyint | reset_yearly bool | current_year smallint NULL | timestamps |
+| id | doc_type varchar(30) UNIQUE | label varchar(60) | prefix varchar(20) | next_number BIGINT UNSIGNED | padding tinyint | reset_yearly bool | current_year smallint NULL | timestamps |
 |---|---|---|---|---|---|---|---|
 
 ### 2.2 Catalogue

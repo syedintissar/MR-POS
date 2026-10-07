@@ -1,6 +1,6 @@
 # Backup & Restore Architecture
 
-**Status:** critical requirement · **Version:** 1.0 (Phase 1) · Implementation: Phase 9 (a minimal manual backup command ships in Phase 2, so data entered during development is protected from day one)
+**Status:** critical requirement · **Version:** 1.1 (Phase 2: engine, verification, retention, copies and command-line restore are built and tested; remaining items are listed in §15)
 
 ---
 
@@ -300,3 +300,59 @@ Implementation notes:
 - The catch-up logic runs when the scheduled time was missed and does not run twice in a day.
 - A transfer to an unreachable destination stays `pending` and becomes `success` after the destination comes back (fake disk).
 - Restore: a safety backup is created first; data matches the backup; newer migrations are applied; a forced import failure triggers the rollback to the safety backup; restoring from a newer schema is refused; a non-admin gets 403; restore without password confirmation is refused.
+
+---
+
+## 15. Implementation status (end of Phase 2)
+
+The owner asked for backups and a *tested* restore to exist from the start, so the core of this design was built in Phase 2 rather than Phase 9.
+
+### Built and tested
+
+| Capability | Where |
+|---|---|
+| Backup archive: `manifest.json` + `database.sql` + uploaded files, SHA-256 checksum file, optional AES-256 encryption | `BackupService`, `DatabaseDumper` |
+| Consistent dump without blocking sales (`--single-transaction`), credentials never on a command line, `DEFINER` stripped so any account can restore | `DatabaseDumper`, `ToolLocator` |
+| Tiers daily / weekly / monthly / manual / safety, with weekly and monthly copies promoted from the daily backup | `BackupService::promote` |
+| Retention (defaults 7 / 4 / 6 / 20 manual / 5 safety, safety kept at least 30 days; protected, newest and newest-deep-verified backups never pruned; nothing pruned after a failed run) | `RetentionService` |
+| Quick verification after every backup; deep verification (imports into the scratch schema `mrpos_verify` and compares tables and row counts) | `BackupVerifier` |
+| Schedule with catch-up after the PC was off, plus an automatic weekly restore test | `BackupSchedule`, `routes/console.php` |
+| Second copies to a USB drive / other PC with pending state, retry with backoff, verification of the copy, and a "requires encryption" refusal | `TransferService` (driver `local_path`) |
+| Health warnings on the dashboard, the sidebar dot and the Backups page (no backup, too old, last attempt failed, failed verification, no second copy, unreachable destination, stuck copies, low disk, scheduler stopped) | `BackupHealth` |
+| Backups page: Backup Now, history, test restore, download (password re-entry), delete / protect, destinations, schedule / retention / encryption settings | `Admin\BackupController` |
+| Safe restore from the command line: deep verify, version-compatibility check, safety backup first, maintenance mode, wipe + import, files restored (old ones moved aside), `migrate`, sessions and cache cleared, automatic rollback if the import fails | `RestoreService`, `pos:backup:restore` |
+| Restore needs an Admin login at the terminal plus a typed confirmation phrase. On a brand-new empty database (replacement PC) the login is skipped because no users exist yet | `BackupRestoreCommand` |
+| Every action audited; failures recorded in `backups.error_message`, the audit log and the application log, and shown on screen | all of the above |
+
+### Deliberately deferred
+
+| Item | Planned |
+|---|---|
+| Restore from the web page (today: command line only, by design, because a restore replaces all data and logs everybody out) | Phase 9 |
+| Cloud destinations: SFTP, S3-compatible, rclone. The `backup_destinations` / `backup_transfers` tables and the retry engine are ready; only the drivers are missing, and cloud drivers will refuse to run unencrypted | Phase 9 |
+| Intraday backups; uploading a backup from USB through the page; the printable Recovery Kit | Phase 9 |
+
+### Commands
+
+```
+php artisan pos:backup:run --tier=manual         # make a backup now (also: daily, weekly, monthly)
+php artisan pos:backup:run --tier=auto           # what the scheduler runs every 15 minutes
+php artisan pos:backup:list                      # history and verification status
+php artisan pos:backup:verify --latest --deep    # prove the newest backup restores
+php artisan pos:backup:verify --file=F:\x.zip    # check a backup file from anywhere
+php artisan pos:backup:retry-transfers           # push pending copies to the USB drive / second PC
+php artisan pos:backup:restore --id=7            # restore (asks for an admin login + confirmation)
+php artisan pos:backup:restore F:\x.zip          # restore from a file, e.g. on a replacement PC
+php artisan pos:audit:verify                     # check the audit log for tampering
+```
+
+### Results of the Phase 2 drills (real database, real tools)
+
+| Drill | Result |
+|---|---|
+| Backup with the read-only `mrpos_backup` account and the MariaDB 11.4 tools | Passed |
+| Deep verification: 21 tables imported into the scratch schema, row counts matched | Passed |
+| Backup Now from the web page, and a password-protected download that is a valid zip | Passed |
+| Restore drill: a marker user deleted and a file changed after the backup, then restored with maintenance mode on | The marker user and the file came back in 3.6 s; the audit chain stayed intact; the web app came back up |
+| Restore command with a wrong password, or as a non-admin | Refused, nothing changed |
+| A failure found by the drill: under PHP's built-in server the dump failed with Windows error 10106 because the child process had no `SystemRoot` | Fixed (it is always passed explicitly now) and covered by a regression test that reproduces the error without the fix |
