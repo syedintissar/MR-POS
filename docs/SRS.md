@@ -347,13 +347,14 @@ Full specification: [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Summary of the Must 
 
 ---
 
-## 6. Implementation status (end of Phase 3)
+## 6. Implementation status (end of Phase 4)
 
 | Requirement group | Status |
 |---|---|
 | AUTH-01…07, USR-01…05, AUD-01…04, SET-01…10, BKP (core) | Built in Phase 2 |
 | **PRD-01…09** products (fields, service items, seeded categories, brands and units, price-change permission and audit, no deletion with history, CSV/XLSX import with opening stock, barcode labels, private re-encoded images) | **Built in Phase 3** |
 | **INV-01…08** stock ledger (append-only), the eleven movement types, adjustments with reasons and void, product stock card, low / out-of-stock lists, weighted-average costing, twice-daily integrity check | **Built in Phase 3** (INV-04 "stock count helper" is covered by the adjustment form; a dedicated count sheet is a later nicety) |
-| PUR-01 supplier master data | Built in Phase 3. PUR-02…09 purchases, supplier payments and the supplier ledger: Phase 4 |
+| **PUR-01…09** supplier master data and account, purchase draft → received → cancelled, landed cost, supplier invoice uniqueness, payment at receiving and later payments with allocation (oldest first / chosen bills / advance), cancel with full reversal, supplier profile and printable statement, last cost shown while entering | **Built in Phase 4**. Notes: PUR-05 "one or more methods" at the moment of receiving is one method (more methods go through Supplier payments straight afterwards); PUR-08 "returns" in the profile arrive with purchase returns (Phase 8) |
+| Payment methods (configurable list used by supplier payments now and by POS later) | Built in Phase 4 |
 | BR-02, BR-05, BR-06, BR-08 (stock ledger single writer, negative-stock policy, exact decimals, cost visibility) | Enforced and tested |
 | Everything else (POS, customers, service jobs, expenses, returns, reports) | Later phases per ROADMAP.md |

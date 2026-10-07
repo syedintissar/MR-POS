@@ -6,6 +6,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Backup;
 use App\Models\Product;
+use App\Models\Purchase;
+use App\Models\Supplier;
 use App\Services\Backup\BackupHealth;
 use App\Services\SettingsService;
 use App\Services\SystemCheck;
@@ -38,8 +40,21 @@ class DashboardController extends Controller
         }
         $integrity = $user->can('inventory.adjust') ? Cache::get('integrity.last') : null;
 
+        // What the shop owes its suppliers: financial information, so it needs the financial permission as well.
+        $payables = null;
+        if ($user->can('dashboard.financials') && $user->can('suppliers.view')) {
+            $row = Supplier::query()->toBase()->selectRaw('COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0) AS owed, COALESCE(SUM(balance > 0), 0) AS suppliers')->first();
+            $payables = [
+                'owed' => (string) $row->owed,
+                'suppliers' => (int) $row->suppliers,
+                'open_bills' => Purchase::query()->where('status', Purchase::RECEIVED)->where('due_amount', '>', 0)->count(),
+                'drafts' => Purchase::query()->where('status', Purchase::DRAFT)->count(),
+            ];
+        }
+
         return view('dashboard', [
             'stockAlerts' => $stockAlerts,
+            'payables' => $payables,
             'integrity' => $integrity && ($integrity['total'] ?? 0) > 0 ? $integrity : null,
             'warnings' => $warnings,
             'lastBackup' => $lastBackup,

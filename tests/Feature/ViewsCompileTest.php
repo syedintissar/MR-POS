@@ -29,6 +29,19 @@ class ViewsCompileTest extends TestCase
         $this->assertSame([], $broken, "Views with syntax errors:\n".implode("\n", $broken));
     }
 
+    public function test_no_directive_is_glued_to_the_word_before_it(): void
+    {
+        // Blade treats "word@endif" like an e-mail address and does NOT see the directive, which leaves an @if open and breaks the whole page.
+        $glued = [];
+        foreach (File::allFiles(resource_path('views')) as $file) {
+            if (preg_match_all('/\w@(?:if|endif|else|elseif|unless|endunless|can|endcan|cannot|endcannot|foreach|endforeach|forelse|empty|endforelse|php|endphp|selected|checked|disabled)\b/', file_get_contents($file->getRealPath()), $m)) {
+                $glued[] = $file->getFilename().': '.implode(', ', $m[0]);
+            }
+        }
+
+        $this->assertSame([], $glued, "Put a space before these directives:\n".implode("\n", $glued));
+    }
+
     public function test_no_view_mixes_the_inline_and_block_php_directives_in_the_wrong_order(): void
     {
         // Blade pairs the FIRST "@php" with the first "@endphp", so an inline "@php(...)" before a block silently swallows markup.

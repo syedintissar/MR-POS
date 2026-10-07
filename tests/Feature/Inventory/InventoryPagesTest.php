@@ -230,8 +230,8 @@ class InventoryPagesTest extends TestCase
         $this->artisan('pos:integrity:check')->expectsOutputToContain('Drifting item')->assertExitCode(1);
         $this->assertDatabaseHas('audit_logs', ['event' => 'integrity_problem']);
 
-        $this->as('Manager')->get('/')->assertSee('Stock records do not add up')->assertSee('Drifting item');
-        $this->as('Cashier')->get('/')->assertDontSee('Stock records do not add up');   // only people who can act on it see it
+        $this->as('Manager')->get('/')->assertSee('Records do not add up')->assertSee('Drifting item');
+        $this->as('Cashier')->get('/')->assertDontSee('Records do not add up');   // only people who can act on it see it
     }
 
     public function test_the_integrity_check_is_scheduled(): void

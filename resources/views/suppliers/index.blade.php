@@ -12,20 +12,22 @@
 
     <div class="card overflow-x-auto">
         <table class="table">
-            <thead><tr><th>Code</th><th>Supplier</th><th>Contact</th><th>Phone</th><th class="text-right">Products</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Supplier</th><th>Contact</th><th>Phone</th><th class="text-right">Products</th><th class="text-right">Balance</th><th>Status</th><th></th></tr></thead>
             <tbody>
             @forelse($suppliers as $s)
                 <tr>
                     <td class="font-mono text-xs text-slate-600">{{ $s->code }}</td>
-                    <td><span class="font-medium text-slate-900">{{ $s->name }}</span>@if($s->company)<div class="text-xs text-slate-500">{{ $s->company }}</div>@endif</td>
+                    <td><a href="{{ route('suppliers.show', $s) }}" class="font-medium text-slate-900">{{ $s->name }}</a>@if($s->company)<div class="text-xs text-slate-500">{{ $s->company }}</div>@endif</td>
                     <td class="text-slate-600">{{ $s->contact_person }}</td>
                     <td class="whitespace-nowrap">{{ $s->phone }}</td>
                     <td class="text-right">{{ $s->products_count }}</td>
+                    <td class="whitespace-nowrap text-right font-medium {{ (float) $s->balance > 0 ? 'text-amber-700' : ((float) $s->balance < 0 ? 'text-blue-700' : 'text-slate-400') }}"
+                        title="{{ (float) $s->balance > 0 ? 'You owe this supplier' : ((float) $s->balance < 0 ? 'Advance held by the supplier' : '') }}">{{ (float) $s->balance == 0 ? '—' : \App\Support\Money::format(abs((float) $s->balance)) }}</td>
                     <td>@if($s->is_active)<span class="badge badge-green">Active</span>@else<span class="badge badge-gray">Inactive</span>@endif</td>
-                    <td class="text-right">@can('suppliers.edit')<a href="{{ route('suppliers.edit', $s) }}" class="btn btn-secondary btn-sm">Open</a>@endcan</td>
+                    <td class="text-right"><a href="{{ route('suppliers.show', $s) }}" class="btn btn-secondary btn-sm">Open</a></td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500">No suppliers found. @can('suppliers.create')<a href="{{ route('suppliers.create') }}">Add one</a>.@endcan</td></tr>
+                <tr><td colspan="8" class="px-4 py-12 text-center text-slate-500">No suppliers found. @can('suppliers.create')<a href="{{ route('suppliers.create') }}">Add one</a>.@endcan</td></tr>
             @endforelse
             </tbody>
         </table>

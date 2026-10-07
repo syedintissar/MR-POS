@@ -862,3 +862,44 @@ Tables added in Phase 3 (migrations `2026_10_07_2000xx_*`): `categories`, `brand
 2. The latest movement's `qty_after` equals `current_stock`.
 
 A mismatch is never fixed automatically: it is written to the audit log, shown as a red warning on the dashboard for people who can adjust stock, and the command exits with code 1.
+
+---
+
+## 10. Phase 4 implementation notes (purchases & supplier accounts)
+
+Tables added in Phase 4 (migrations `2026_10_07_3000xx_*`): `payment_methods`, `supplier_ledger_entries`, `purchases`, `purchase_items`, `supplier_payments`, `purchase_payments`.
+
+| Item | As built | Why |
+|---|---|---|
+| `payment_methods` | `name` and `code` unique; `kind` in `cash, bank, card, wallet, customer_credit, other`; `requires_reference`; `is_active`; `is_system`; `sort_order`. Seeded: Cash, Bank Transfer, Card, Easypaisa, JazzCash, Cheque, Customer Credit. Cash and Customer Credit are **system** methods (cannot be switched off or deleted). A used method can only be switched off | Owner-editable list (Settings → Payment methods); Phase 5 reuses it for sales |
+| `supplier_ledger_entries` | **Append-only** (`BEFORE UPDATE/DELETE` triggers) with `CHECK (debit >= 0 AND credit >= 0 AND ((debit > 0) <> (credit > 0)))`, i.e. exactly one side per row. Types: `opening_balance, purchase, purchase_void, payment, payment_void, purchase_return, refund_received, balance_adjustment` | Same protection as `audit_logs` and `stock_movements` |
+| Sign convention | `balance = SUM(credit) - SUM(debit)`. **Positive = the shop owes the supplier.** Negative = the supplier holds an advance of ours | One rule everywhere; shown in words on every screen |
+| `suppliers.balance` / `opening_balance` | Cached; written **only** by `SupplierAccountService` (`balance`) and `AdjustSupplierBalance` (`opening_balance`). Not mass-assignable | One write path |
+| `purchases.purchase_no` | Nullable and unique; assigned **when received** from the `purchase` sequence inside the same transaction, so a rolled-back receipt gives the number back. A `CHECK` forbids a received or cancelled purchase without a number | Gap-free numbers; drafts have none |
+| Supplier invoice uniqueness | Generated column `active_invoice_key = CASE WHEN status='voided' THEN NULL ELSE supplier_invoice_no END` with `UNIQUE (supplier_id, active_invoice_key)`. The database itself refuses a duplicate even if two terminals race; a cancelled purchase frees its number | SRS PUR-02 and the owner-default decision in DESIGN_REVIEW §7 |
+| `purchases` money columns | `subtotal, discount_amount, tax_amount, additional_cost, grand_total` (the document) and the caches `paid_amount, returned_amount, due_amount, payment_status`, all `DECIMAL(15,2)`, `CHECK >= 0`. `due = grand_total - returned - paid` (never below 0) | Caches are recomputed from `purchase_payments` and checked nightly |
+| `purchase_items` | `quantity DECIMAL(12,3) > 0`, `unit_cost DECIMAL(15,4)`, `discount_amount`/`tax_amount` (totals for the line), `line_total`, `landed_unit_cost` (set when received), `returned_quantity <= quantity` (filled by Phase 8) | |
+| `supplier_payments` | `type` is `payment` or `refund`, `status` is `posted` or `voided`, `amount > 0`. Phase 4 only creates `payment` rows; `refund` (money back from a supplier) arrives with purchase returns in Phase 8 | A refund needs the return it belongs to |
+| `purchase_payments` | Which bill(s) a payment settles; `UNIQUE (supplier_payment_id, purchase_id)`, `amount > 0`. The part of a payment that is not allocated (or whose bill was cancelled) is an **advance** | SRS PUR-06 |
+
+### Posting rules as implemented
+| Operation | Stock | Supplier ledger | Other |
+|---|---|---|---|
+| Receive purchase (`ReceivePurchase`) | `purchase` +qty per line at the **landed** unit cost, so the average cost moves | Cr `grand_total` (`purchase`); none for a zero-value bill | Optional payment made at the same moment: a normal supplier payment settling this bill. All in one transaction |
+| Cancel a received purchase (`VoidPurchase`) | `purchase_void` −qty at the landed cost, unwinding the average cost. **Refused** if the stock is no longer there, or goods were returned | Dr `grand_total` (`purchase_void`) | Payments already made **stay recorded**; they simply become an advance. (The original design cancelled them too; see DESIGN_REVIEW P4-04) |
+| Supplier payment (`PostSupplierPayment`) | – | Dr amount (`payment`) | Allocation `auto` (oldest bills first), `manual` (chosen bills) or `advance` (none) |
+| Cancel a payment (`VoidSupplierPayment`) | – | Cr amount (`payment_void`) | The bills it settled are recomputed and open again |
+| Apply an advance (`AllocateSupplierAdvance`) | – | **None** (no money moves) | Only the bills' paid / due change |
+| Opening balance / correction (`AdjustSupplierBalance`) | – | `opening_balance` (once per supplier) or `balance_adjustment`: Cr if "we owe", Dr if "they owe" | Administrator only, password re-entered, reason required |
+
+**Landed cost.** The invoice discount, invoice tax (when `tax.purchase_tax_in_cost` is on) and the extra costs (freight, loading) form one pool that is shared over the lines in proportion to each line's value (by quantity if the whole bill has no value); the last line takes the remainder so nothing is lost. Each line's landed unit cost (4 decimals) is what the stock ledger and the average cost use. Unit costs are stored to 4 decimals, so the stock value of a bill can differ from the bill by at most half of 0.0001 per unit bought.
+
+**Lock order** (every operation, so two terminals can never deadlock): supplier row → purchases (by id) → products (by id) → number sequences. Every write that changes a supplier's account, a bill's payments or a bill's status first locks that supplier, which serialises them.
+
+### Integrity checks added (`pos:integrity:check`, twice a day)
+3. `suppliers.balance` equals `SUM(credit) - SUM(debit)` of the supplier's ledger.
+4. For every received or cancelled purchase: `paid_amount`, `due_amount` and `payment_status` equal what its posted payments imply (a cancelled purchase must show 0 and 0).
+5. A posted payment is never allocated to bills for more than its amount (allocations to cancelled bills do not count).
+6. For every received purchase the quantity added to stock by its `purchase` movements equals the quantity on its lines.
+
+As before, nothing is "fixed" automatically: a mismatch is audited, shown on the dashboard and makes the command exit with code 1.

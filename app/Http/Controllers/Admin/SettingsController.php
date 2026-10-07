@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\IpAllowList;
 use App\Models\DocumentSequence;
+use App\Models\PaymentMethod;
 use App\Services\AuditLogger;
 use App\Services\SettingsService;
 use App\Support\SettingsCatalogue;
@@ -26,6 +27,7 @@ class SettingsController extends Controller
         'currency' => 'Currency',
         'tax' => 'Sales tax',
         'sales' => 'Sales',
+        'payment_methods' => 'Payment methods',
         'inventory' => 'Inventory',
         'printing' => 'Printing',
         'receipt' => 'Receipt text',
@@ -39,13 +41,16 @@ class SettingsController extends Controller
     {
         $this->authorize('settings.view');
         abort_unless(array_key_exists($group, self::TABS), 404);
+        $special = in_array($group, ['numbering', 'payment_methods'], true);   // tabs with their own form
 
         return view('admin.settings.index', [
             'tabs' => self::TABS,
             'group' => $group,
-            'fields' => $group === 'numbering' ? [] : collect(SettingsCatalogue::forGroup($group))->reject(fn ($d) => $d['hidden'] ?? false)->all(),
-            'values' => $group === 'numbering' ? [] : $this->settings->group($group),
+            'fields' => $special ? [] : collect(SettingsCatalogue::forGroup($group))->reject(fn ($d) => $d['hidden'] ?? false)->all(),
+            'values' => $special ? [] : $this->settings->group($group),
             'sequences' => $group === 'numbering' ? DocumentSequence::query()->orderBy('id')->get() : collect(),
+            'methods' => $group === 'payment_methods' ? PaymentMethod::query()->withCount('supplierPayments')->orderBy('sort_order')->orderBy('name')->get() : collect(),
+            'kinds' => array_diff_key(PaymentMethod::KINDS, ['customer_credit' => 1]),
             'hasLogo' => $this->settings->string('shop.logo_path') !== '',
         ]);
     }
@@ -53,7 +58,7 @@ class SettingsController extends Controller
     public function update(Request $request, string $group): RedirectResponse
     {
         $this->authorize('settings.manage');
-        abort_unless(array_key_exists($group, self::TABS) && $group !== 'numbering', 404);
+        abort_unless(array_key_exists($group, self::TABS) && ! in_array($group, ['numbering', 'payment_methods'], true), 404);
 
         $defs = collect(SettingsCatalogue::forGroup($group))->reject(fn ($d) => $d['hidden'] ?? false);
         $rules = $defs->mapWithKeys(fn ($d, $key) => [str_replace('.', '_', $key) => $d['rules']])->all();

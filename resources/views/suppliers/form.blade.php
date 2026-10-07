@@ -27,7 +27,8 @@
             <div class="space-y-5 self-start">
                 <div class="card card-body text-sm text-slate-600">
                     <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Account</div>
-                    <p class="mt-1">Purchases, payments and what you owe this supplier appear here from the next phase (Purchases).</p>
+                    <p class="mt-1">@if((float) $supplier->balance > 0)You owe this supplier <strong class="text-amber-700">{{ \App\Support\Money::withSymbol($supplier->balance) }}</strong>.@elseif((float) $supplier->balance < 0)This supplier holds an advance of yours: <strong class="text-blue-700">{{ \App\Support\Money::withSymbol(abs((float) $supplier->balance)) }}</strong>.@else Nothing is owed either way.@endif</p>
+                    <a href="{{ route('suppliers.show', $supplier) }}" class="mt-1 inline-block text-sm">Open the account, bills and statement →</a>
                     <p class="mt-2 text-xs text-slate-500">{{ $supplier->products_count }} product(s) use this supplier as their usual supplier.</p>
                 </div>
                 <div class="card card-body space-y-2">

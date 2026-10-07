@@ -140,3 +140,31 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P3-08 | Supplier balances cannot be correct without a ledger | The fields exist but are not editable until Phase 4 builds the supplier ledger |
 | P3-09 | A product's unit decides whether decimals are allowed, so changing it after stock exists could leave 2.5 pieces | The unit and the stock/service kind are locked once a product has stock history; a unit cannot stop allowing decimals while products with history use it |
 | P3-10 | Open questions Q6 (Excel data), barcodes and label printer were not answered | Defaults used: CSV/XLSX import with a downloadable template; labels generated from the barcode or SKU (Code 128) in three sizes, printed from the browser |
+
+---
+
+## 7. Phase 4 decisions and findings
+
+### Defaults used for the questions left open at the end of Phase 3 (change any of them later)
+| # | Question | Default used |
+|---|---|---|
+| P4-D1 | Existing supplier balances | None entered. An administrator can post an **opening balance** per supplier (once) on the supplier's page, with a reason and password re-entry. Corrections use "balance adjustment" |
+| P4-D2 | Same supplier invoice number twice | Refused for one supplier (other suppliers may reuse a number). A cancelled purchase frees its number so the corrected bill can be entered |
+| P4-D3 | Freight / invoice discount | Shared over the lines in proportion to line value (last line takes the remainder); the result is the landed cost used for the average cost |
+| P4-D4 | Payment methods | Cash, Bank Transfer, Card, Easypaisa, JazzCash, Cheque (+ the system "Customer Credit"). Editable in Settings → Payment methods. Bank Transfer, Easypaisa, JazzCash and Cheque ask for a reference number |
+| P4-D5 | Purchase tax | Added to the product cost (setting `tax.purchase_tax_in_cost`, on by default); switch it off if the shop ever claims input tax back |
+| P4-D6 | Payment when receiving | One payment (any method) can be recorded while receiving; further payments, or a second method, go through Supplier payments |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P4-01 | **The integrity check caught a real bug in my first test run.** A payment that had settled a cancelled bill was still counted as "allocated" when it was applied again as an advance, so the check reported it as over-allocated | The check, and `SupplierPayment::allocatedAmount()`, ignore allocations to cancelled bills (that money is an advance again). Covered by tests that apply an advance after a cancellation |
+| P4-02 | **A Blade pitfall that blanks a whole page**: a directive glued to the word before it (`yet@endif`) is read like an e-mail address and ignored, so the `@if` stays open and the page crashes. It broke the dashboard once | A test now scans every view for a directive glued to a word; the existing compile and parse test covers the rest |
+| P4-03 | Races are real for purchasing too: two people receiving the same draft, paying the same bill, or cancelling the same payment | Five tests start separate PHP processes that act at the same instant. Exactly one receive and one full payment succeed; automatic payments never over-pay a bill; the supplier ledger still adds up. **Mutation check:** with every row lock removed, four processes received the same draft and two paid the same bill, so the tests genuinely detect the problem |
+| P4-04 | **Deviation from the design (DATABASE §5):** the design said cancelling a purchase also cancels its payments | Not done. A payment is a real handover of money; cancelling the bill must not silently erase it. It stays recorded and becomes an **advance** with the supplier, which can be applied to another bill, or cancelled on its own if it was a mistake |
+| P4-05 | Models returned by an action did not contain the database defaults of guarded columns (a new draft had no `status` in memory) | Actions return the row as the database holds it |
+| P4-06 | Unit costs are stored to 4 decimals, so a landed cost cannot always reproduce a bill to the paisa | Shares are calculated to 8 decimals and the last line takes the remainder; the maximum error is 0.00005 per unit and is documented in DATABASE §10 and tested |
+| P4-07 | Refunds received from a supplier have no document to belong to yet | Deferred to Phase 8 together with purchase returns. The `refund` type and ledger entry type exist but nothing creates them yet |
+| P4-08 | Purchase screens necessarily show costs | They (and the supplier account) belong to Manager and Admin only. Tests prove a cashier and a technician see no cost or supplier information on the dashboard, product pages, the product search JSON, the stock card or any purchasing URL |
+| P4-09 | The test helper that empties the data tables also emptied the payment methods | `payment_methods` joined the list of reference tables that are kept (roles, permissions, units, categories, brands, numbering) |
+| P4-10 | Two tests of mine used `array + array` (which keeps the left-hand value) and silently did not test what they claimed | Replaced with `array_merge`; noted so it is not repeated |

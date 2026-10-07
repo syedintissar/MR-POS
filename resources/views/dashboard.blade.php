@@ -15,7 +15,7 @@
 
     @if($integrity)
         <div class="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <div class="font-semibold">⚠ Stock records do not add up ({{ $integrity['total'] }} problem(s), checked {{ \Illuminate\Support\Carbon::parse($integrity['ran_at'])->diffForHumans() }})</div>
+            <div class="font-semibold">⚠ Records do not add up ({{ $integrity['total'] }} problem(s), checked {{ \Illuminate\Support\Carbon::parse($integrity['ran_at'])->diffForHumans() }})</div>
             <ul class="mt-1 list-disc pl-5">@foreach(array_slice($integrity['problems'], 0, 3) as $p)<li>{{ $p }}</li>@endforeach</ul>
             <p class="mt-1 text-xs">Nothing was changed automatically. Please ask your computer person to look at it; details are in the audit log.</p>
         </div>
@@ -46,6 +46,16 @@
                 @else
                     <p class="mt-3 text-sm text-slate-500">Nothing is running low.</p>
                 @endif
+            </div>
+        @endif
+        @if($payables)
+            <div class="card card-body">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Owed to suppliers</div>
+                    @can('purchases.view')<a href="{{ route('purchases.index', ['payment' => 'unpaid']) }}" class="text-xs">Unpaid bills</a>@endcan
+                </div>
+                <div class="mt-1 text-2xl font-semibold {{ (float) $payables['owed'] > 0 ? 'text-amber-600' : 'text-slate-900' }}">{{ \App\Support\Money::withSymbol($payables['owed']) }}</div>
+                <div class="text-xs text-slate-500">{{ $payables['suppliers'] }} supplier(s) · {{ $payables['open_bills'] }} open bill(s)@if($payables['drafts']) · {{ $payables['drafts'] }} draft(s) not received yet @endif</div>
             </div>
         @endif
         @can('backups.view')

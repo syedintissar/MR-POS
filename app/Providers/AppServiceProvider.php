@@ -6,11 +6,14 @@ use App\Models\Backup;
 use App\Models\BackupDestination;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\Setting;
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
 use App\Models\Supplier;
+use App\Models\SupplierPayment;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\SettingsService;
@@ -52,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
             'unit' => Unit::class,
             'stock_adjustment' => StockAdjustment::class,
             'stock_movement' => StockMovement::class,
+            'purchase' => Purchase::class,
+            'supplier_payment' => SupplierPayment::class,
+            'payment_method' => PaymentMethod::class,
         ]);
 
         $this->applySessionTimeout();

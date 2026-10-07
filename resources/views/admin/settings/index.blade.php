@@ -39,6 +39,61 @@
                     @if($canManage)<button type="submit" class="btn btn-primary">Save numbering</button>@endif
                 </div>
             </form>
+        @elseif($group === 'payment_methods')
+            <div class="card overflow-x-auto">
+                <div class="card-header"><h2 class="card-title">Payment methods</h2></div>
+                <table class="table">
+                    <thead><tr><th>Name</th><th>Kind</th><th>Needs a reference</th><th>Order</th><th>Used</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach($methods as $m)
+                        <tr>
+                            <td colspan="7" class="p-0">
+                                <div class="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                                    <form method="POST" action="{{ route('payment-methods.update', $m) }}" class="flex flex-1 flex-wrap items-center gap-3">
+                                        @csrf @method('PUT')
+                                        <input name="name" value="{{ $m->name }}" class="input w-44" maxlength="50" required @disabled(! $canManage)>
+                                        @if($m->is_system)
+                                            <input type="hidden" name="kind" value="{{ $m->kind }}">
+                                            <span class="w-40 text-slate-600">{{ \App\Models\PaymentMethod::KINDS[$m->kind] ?? $m->kind }} <span class="badge badge-gray">system</span></span>
+                                        @else
+                                            <select name="kind" class="input w-52" @disabled(! $canManage)>@foreach($kinds as $k => $label)<option value="{{ $k }}" @selected($m->kind === $k)>{{ $label }}</option>@endforeach</select>
+                                        @endif
+                                        <label class="flex items-center gap-1.5 text-sm"><input type="checkbox" name="requires_reference" value="1" @checked($m->requires_reference) @disabled(! $canManage) class="h-4 w-4 rounded border-slate-300 text-brand-600"> reference</label>
+                                        <input name="sort_order" type="number" min="0" max="9999" value="{{ $m->sort_order }}" class="input w-20" @disabled(! $canManage)>
+                                        <span class="text-xs text-slate-500">{{ $m->supplier_payments_count }} payment(s)</span>
+                                        @if($m->is_active)<span class="badge badge-green">On</span>@else<span class="badge badge-gray">Off</span>@endif
+                                        @if($canManage)<button class="btn btn-secondary btn-sm">Save</button>@endif
+                                    </form>
+                                    @if($canManage && ! $m->is_system)
+                                        <form method="POST" action="{{ route('payment-methods.toggle', $m) }}">@csrf<button class="btn btn-secondary btn-sm" data-no-loading>{{ $m->is_active ? 'Switch off' : 'Switch on' }}</button></form>
+                                        @if($m->supplier_payments_count === 0)
+                                            <form method="POST" action="{{ route('payment-methods.destroy', $m) }}" data-confirm="Delete “{{ $m->name }}”?" data-confirm-label="Delete" data-danger="1">@csrf @method('DELETE')<button class="btn btn-secondary btn-sm text-red-600">Delete</button></form>
+                                        @endif
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+                @foreach(['name', 'kind', 'sort_order'] as $f)@error($f)<p class="error-text px-5 pb-2">{{ $message }}</p>@enderror @endforeach
+            </div>
+
+            @if($canManage)
+                <form method="POST" action="{{ route('payment-methods.store') }}" class="card mt-4">
+                    @csrf
+                    <div class="card-header"><h2 class="card-title">Add a payment method</h2></div>
+                    <div class="card-body grid gap-4 sm:grid-cols-3">
+                        <x-form.input name="name" label="Name" placeholder="e.g. Meezan Bank" required />
+                        <x-form.select name="kind" label="Kind" :options="$kinds" value="bank" />
+                        <div class="flex items-end"><x-form.checkbox name="requires_reference" label="Ask for a reference number" :checked="false" /></div>
+                    </div>
+                    <div class="flex items-center justify-between border-t border-slate-200 px-5 py-3">
+                        <p class="help">Cash and Customer Credit are needed by the system and cannot be removed. A method that has been used can be switched off, never deleted, so old payments keep their record.</p>
+                        <button class="btn btn-primary">Add method</button>
+                    </div>
+                </form>
+            @endif
         @else
             <form method="POST" action="{{ route('settings.update', $group) }}" enctype="multipart/form-data" class="card">
                 @csrf @method('PUT')

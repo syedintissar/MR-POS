@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\PaymentMethodController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
@@ -14,8 +15,10 @@ use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
+use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierPaymentController;
 use Illuminate\Support\Facades\Route;
 
 // Public: shop logo (login page and printed receipts).
@@ -92,6 +95,42 @@ Route::middleware('auth')->group(function () {
         Route::post('suppliers/{supplier}/toggle', [SupplierController::class, 'toggle'])->whereNumber('supplier')->name('suppliers.toggle');
     });
     Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->whereNumber('supplier')->middleware(['can:suppliers.delete', 'password.confirm'])->name('suppliers.destroy');
+    Route::middleware('can:suppliers.view')->group(function () {
+        Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->whereNumber('supplier')->name('suppliers.show');
+        Route::get('suppliers/{supplier}/statement', [SupplierController::class, 'statement'])->whereNumber('supplier')->name('suppliers.statement');
+    });
+    Route::post('suppliers/{supplier}/adjust-balance', [SupplierController::class, 'adjustBalance'])->whereNumber('supplier')->middleware(['can:suppliers.adjust_balance', 'password.confirm'])->name('suppliers.adjust-balance');
+
+    // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------
+
+    Route::prefix('purchases')->group(function () {
+        Route::middleware('can:purchases.view')->group(function () {
+            Route::get('/', [PurchaseController::class, 'index'])->name('purchases.index');
+            Route::get('lookup', [PurchaseController::class, 'lookup'])->name('purchases.lookup');
+        });
+        Route::middleware('can:purchases.create')->group(function () {
+            Route::get('create', [PurchaseController::class, 'create'])->name('purchases.create');
+            Route::post('/', [PurchaseController::class, 'store'])->name('purchases.store');
+            Route::get('{purchase}/edit', [PurchaseController::class, 'edit'])->whereNumber('purchase')->name('purchases.edit');
+            Route::put('{purchase}', [PurchaseController::class, 'update'])->whereNumber('purchase')->name('purchases.update');
+            Route::delete('{purchase}', [PurchaseController::class, 'destroy'])->whereNumber('purchase')->name('purchases.destroy');
+        });
+        Route::get('{purchase}', [PurchaseController::class, 'show'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.show');
+        Route::get('{purchase}/print', [PurchaseController::class, 'print'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.print');
+        Route::post('{purchase}/receive', [PurchaseController::class, 'receive'])->whereNumber('purchase')->middleware('can:purchases.receive')->name('purchases.receive');
+        Route::post('{purchase}/void', [PurchaseController::class, 'void'])->whereNumber('purchase')->middleware(['can:purchases.void', 'password.confirm'])->name('purchases.void');
+    });
+
+    Route::prefix('supplier-payments')->group(function () {
+        Route::get('/', [SupplierPaymentController::class, 'index'])->middleware('can:supplier_payments.view')->name('supplier-payments.index');
+        Route::middleware('can:supplier_payments.create')->group(function () {
+            Route::get('create', [SupplierPaymentController::class, 'create'])->name('supplier-payments.create');
+            Route::post('/', [SupplierPaymentController::class, 'store'])->name('supplier-payments.store');
+            Route::post('{payment}/allocate', [SupplierPaymentController::class, 'allocate'])->whereNumber('payment')->name('supplier-payments.allocate');
+        });
+        Route::get('{payment}', [SupplierPaymentController::class, 'show'])->whereNumber('payment')->middleware('can:supplier_payments.view')->name('supplier-payments.show');
+        Route::post('{payment}/void', [SupplierPaymentController::class, 'void'])->whereNumber('payment')->middleware(['can:supplier_payments.void', 'password.confirm'])->name('supplier-payments.void');
+    });
     // Own password
     Route::get('/password/change', [PasswordChangeController::class, 'edit'])->name('password.change');
     Route::put('/password/change', [PasswordChangeController::class, 'update'])->name('password.update');
@@ -128,6 +167,10 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:settings.manage')->group(function () {
             Route::put('settings-numbering', [SettingsController::class, 'updateNumbering'])->name('settings.numbering');
             Route::put('settings/{group}', [SettingsController::class, 'update'])->name('settings.update');
+            Route::post('payment-methods', [PaymentMethodController::class, 'store'])->name('payment-methods.store');
+            Route::put('payment-methods/{method}', [PaymentMethodController::class, 'update'])->whereNumber('method')->name('payment-methods.update');
+            Route::post('payment-methods/{method}/toggle', [PaymentMethodController::class, 'toggle'])->whereNumber('method')->name('payment-methods.toggle');
+            Route::delete('payment-methods/{method}', [PaymentMethodController::class, 'destroy'])->whereNumber('method')->name('payment-methods.destroy');
         });
 
         // Backups

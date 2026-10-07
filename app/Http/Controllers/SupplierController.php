@@ -4,17 +4,25 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\Purchasing\AdjustSupplierBalance;
+use App\Models\Purchase;
 use App\Models\Supplier;
+use App\Models\SupplierPayment;
 use App\Services\AuditLogger;
 use App\Services\DocumentNumberService;
+use App\Services\Purchasing\SupplierAccountService;
+use App\Support\Decimal;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
- * Supplier master data. What the shop owes a supplier is posted through the supplier ledger,
- * which arrives with purchases in Phase 4, so balances are not editable here.
+ * Supplier master data and the supplier's account (profile, statement, balance adjustment).
+ * What the shop owes a supplier is never edited here: it comes only from the supplier ledger, which purchases,
+ * payments and the deliberate, password-confirmed balance adjustment write to.
  */
 class SupplierController extends Controller
 {
@@ -32,6 +40,63 @@ class SupplierController extends Controller
             ->orderBy('name')->paginate(25)->withQueryString();
 
         return view('suppliers.index', compact('suppliers'));
+    }
+
+    /** Supplier profile: balance, open bills, recent payments and the account statement. */
+    public function show(Request $request, Supplier $supplier): View
+    {
+        $this->authorize('suppliers.view');
+        $range = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date']]);
+
+        $accounts = app(SupplierAccountService::class);
+        $bills = Purchase::query()->where('supplier_id', $supplier->id)->owing()->get();
+
+        return view('suppliers.show', [
+            'supplier' => $supplier,
+            'bills' => $bills,
+            'owed' => $bills->reduce(fn ($c, $b) => Decimal::add($c, (string) $b->due_amount, 2), '0.00'),
+            'advance' => $accounts->advanceFor($supplier->id),
+            'purchaseTotal' => (string) Purchase::query()->where('supplier_id', $supplier->id)->where('status', Purchase::RECEIVED)->sum('grand_total'),
+            'paidTotal' => (string) SupplierPayment::query()->where('supplier_id', $supplier->id)->where('status', 'posted')->sum('amount'),
+            'recentPayments' => SupplierPayment::query()->with('method:id,name')->where('supplier_id', $supplier->id)->orderByDesc('payment_date')->orderByDesc('id')->limit(8)->get(),
+            'recentPurchases' => Purchase::query()->where('supplier_id', $supplier->id)->orderByDesc('purchase_date')->orderByDesc('id')->limit(8)->get(),
+            'statement' => $accounts->statement($supplier->id, $range['from'] ?? null, $range['to'] ?? null),
+            'from' => $range['from'] ?? null,
+            'to' => $range['to'] ?? null,
+        ]);
+    }
+
+    public function statement(Request $request, Supplier $supplier): View
+    {
+        $this->authorize('suppliers.view');
+        $range = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date']]);
+
+        return view('suppliers.statement', [
+            'supplier' => $supplier,
+            'statement' => app(SupplierAccountService::class)->statement($supplier->id, $range['from'] ?? null, $range['to'] ?? null),
+            'from' => $range['from'] ?? null,
+            'to' => $range['to'] ?? null,
+        ]);
+    }
+
+    public function adjustBalance(Request $request, Supplier $supplier, AdjustSupplierBalance $adjust): RedirectResponse
+    {
+        $this->authorize('suppliers.adjust_balance');
+        $d = $request->validate([
+            'type' => ['required', Rule::in(AdjustSupplierBalance::TYPES)],
+            'direction' => ['required', 'in:we_owe,they_owe'],
+            'amount' => ['required', 'numeric', 'gt:0', 'max:9999999999', 'decimal:0,2'],
+            'entry_date' => ['nullable', 'date', 'before_or_equal:today'],
+            'reason' => ['required', 'string', 'max:200'],
+        ], ['decimal' => 'Too many decimal places.']);
+
+        try {
+            $adjust->execute($supplier, $d['type'], $d['direction'], (string) $d['amount'], $d['reason'], $request->user(), $d['entry_date'] ?? null);
+        } catch (DomainException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('suppliers.show', $supplier)->with('success', 'The supplier\'s account has been updated.');
     }
 
     public function create(): View

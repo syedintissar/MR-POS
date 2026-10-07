@@ -32,6 +32,8 @@
         ['label' => 'Adjustments', 'route' => 'adjustments.index', 'match' => 'adjustments.*', 'can' => 'inventory.view', 'icon' => 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4'],
     ];
     $purchasing = [
+        ['label' => 'Purchases', 'route' => 'purchases.index', 'match' => 'purchases.*', 'can' => 'purchases.view', 'icon' => 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z'],
+        ['label' => 'Supplier payments', 'route' => 'supplier-payments.index', 'match' => 'supplier-payments.*', 'can' => 'supplier_payments.view', 'icon' => 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'],
         ['label' => 'Suppliers', 'route' => 'suppliers.index', 'match' => 'suppliers.*', 'can' => 'suppliers.view', 'icon' => 'M8 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h1m-1 0H9m4-10h3.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V16h-1'],
     ];
     $groups = ['' => $nav, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];

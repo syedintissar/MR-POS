@@ -95,3 +95,17 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | Temporary files | `D:\_env_backups\2026-10-06_pre-phase2` and `mrpos-smoke-test` from Phase 2 are untouched. A temporary PHP development server on port 8099 was used for the HTTP checks and stopped afterwards |
 | MariaDB 11.4 | **Still a hand-started process** (not a Windows service). During the session the PC restarted once and MariaDB had to be started again by hand; it recovered cleanly. Run `deploy\windows\install-mariadb-service.ps1` as Administrator to make this permanent |
 | Not done | Windows service, scheduled task, Apache restart, firewall and vhost: all still need an Administrator (see the Phase 2 section above) |
+
+---
+
+## 2026-10-07: Phase 4 additions
+
+| Change | Detail |
+|---|---|
+| Project packages | None added. No change outside `D:\MR-POS` apart from the items below |
+| Real database `mrpos` | **Backed up first** (`mrpos_2026-10-07_151617_daily.zip`, deep-verified), then migrated with the three Phase 4 migrations (`payment_methods`, `supplier_ledger_entries`, `purchase tables`). After the drills it was reset to a clean install (0 users, 0 products, 0 suppliers, 7 payment methods). The drill backups (10 files: daily/weekly/monthly of the clean state, the manual backup that held the drill data, and the safety backup taken by the restore drill) were **moved, not deleted**, to `D:\_env_backups\mrpos-phase4-smoke` |
+| Front-end assets | `npm run build` was run so the new screens' styles are in `public/build` (git-ignored). **Run it again after copying a new release** (INSTALLATION §11) |
+| Temporary processes | A PHP development server on port 8099 was used for the HTTP drill and **stopped** afterwards. The other PHP servers on this PC (ports 8000 and 3306/3307 projects) were not touched |
+| Restore drill | Done on the real `mrpos` database through the restore service: data entered after the backup disappeared, everything before it came back, the append-only protections (supplier ledger, stock ledger, audit log) still rejected edits, integrity check and audit chain passed. The interactive password prompt of `pos:backup:restore` cannot be scripted on Windows (it reads the real console), so the drill called the same service the command calls once the administrator is authenticated; the prompt path itself is covered by the Phase 2 tests |
+| Throwaway accounts | Users `drill` and `drillcash` existed only in the drill and were removed with the reset |
+| Not done | Windows service, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |

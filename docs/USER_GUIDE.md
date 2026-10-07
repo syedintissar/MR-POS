@@ -80,11 +80,34 @@ A mistaken adjustment is cancelled, not deleted: open it and use **Cancel this a
 ## 6. Purchases & suppliers
 
 ### Suppliers
-*Suppliers.* Add each supplier with name, company, phone, WhatsApp, email, address and NTN. A supplier gets a code (SUP-000001) automatically. You can deactivate a supplier; one that is used by a product cannot be deleted (administrators only). What you owe each supplier, supplier bills and payments arrive with *Purchases* in the next phase.
+*Suppliers.* Add each supplier with name, company, phone, WhatsApp, email, address and NTN. A supplier gets a code (SUP-000001) automatically. You can deactivate a supplier; one that has products, bills or payments cannot be deleted (administrators only). Click a supplier's name to open the **supplier account**: what you owe them (or the advance they hold of yours), the bills still to pay, recent purchases and payments, and the account statement.
 
-### Entering supplier bills and receiving stock [Phase 4]
-### Paying suppliers [Phase 4]
-### Returning goods to a supplier [Phase 4]
+### Entering supplier bills and receiving stock
+1. **Purchases → + New purchase.** Choose the supplier, type the supplier's invoice number (optional) and the date.
+2. **Add products:** type a name or SKU, or scan the barcode and press Enter. While you type, each result shows what you paid last (to this supplier, or in general), and the cost box is filled in for you. Enter the quantity and the cost of each product; a discount or tax for that line is optional.
+3. Under **Extras on the invoice** enter the invoice discount, invoice tax and freight / loading, if any. **Landed each** shows what one unit really cost after its share of those extras; a red ▲ or green ▼ tells you how much dearer or cheaper it is than last time.
+4. **Paid now?** is optional. Enter an amount and how you paid; whatever is not paid now stays on the supplier's account.
+5. **Save draft** keeps the bill without any effect (no stock, no debt) so you can finish it later. **Save & receive stock** does it all at once: the stock goes up, the average cost is updated, the bill gets its number (PUR-000001 …) and the supplier is owed the total. It is all-or-nothing: if anything is wrong, nothing is saved and the draft stays a draft.
+
+A received purchase cannot be edited. If it was entered wrongly, open it and use **Cancel this purchase** (Manager or Administrator; it asks for your password and a reason). The goods leave stock again and the supplier's account is corrected; nothing is deleted. It is refused if some of those goods have already been sold, because the stock is no longer there. **Money already paid on a cancelled bill is not lost**: it stays recorded as an advance with that supplier, which you can apply to the next bill.
+
+The same supplier invoice number cannot be entered twice for one supplier (a cancelled purchase frees its number).
+
+### Paying suppliers
+**Supplier payments → + Pay a supplier** (or **Pay** on a bill or on the supplier's page). Choose the supplier, the amount, how you paid and, for bank transfers, wallets and cheques, the reference number. Then choose how the payment is applied:
+- **Oldest bills first** (recommended): the screen shows which bills the money settles.
+- **I will choose the bills:** type the amount for each bill, or press *full*.
+- **Keep it as an advance:** the money is recorded but not applied to a bill yet.
+
+Money paid beyond what is owed is kept as an advance. An advance can be applied later: open the payment and use **Apply the advance to open bills**. If a payment was recorded by mistake, open it and **Cancel this payment** (asks for your password and a reason): the bills it settled are open again.
+
+### The supplier account and statement
+Open a supplier to see the **balance** (amber = you owe them, blue = they hold an advance of yours), the bills still to pay, and the **account statement**: every purchase, payment, cancellation and adjustment with a running balance. Pick *From* and *To* dates to see a period (the figure carried forward from before is shown), and press **Print** for a statement you can hand to the supplier. The administrator can enter an **opening balance** (what you already owed when you started using the system, once per supplier) or a **correction**, always with a written reason; these cannot be edited afterwards, only offset by another entry.
+
+### Payment methods
+**Settings → Payment methods** lists Cash, Bank Transfer, Card, Easypaisa, JazzCash, Cheque and Customer Credit. The administrator can add methods (for example a particular bank), rename them, tick whether a reference number is required, change their order and switch them off. Cash and Customer Credit are needed by the system; a method that has been used can be switched off but not deleted.
+
+### Returning goods to a supplier [Phase 8]
 ## 7. Returns [Phase 8]
 ## 8. Expenses [Phase 8]
 ## 9. Reports & dashboard [Phase 8]

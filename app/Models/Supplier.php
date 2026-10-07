@@ -42,9 +42,24 @@ class Supplier extends Model
             ->orWhere('phone', 'like', $like)->orWhere('code', 'like', $like)->orWhere('contact_person', 'like', $like));
     }
 
-    /** A supplier with any history can only be deactivated, not deleted. Later phases add purchases here. */
+    public function purchases(): HasMany
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SupplierPayment::class);
+    }
+
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(SupplierLedgerEntry::class);
+    }
+
+    /** A supplier with any history can only be deactivated, not deleted. */
     public function hasHistory(): bool
     {
-        return $this->products()->withTrashed()->exists();
+        return $this->products()->withTrashed()->exists() || $this->purchases()->exists() || $this->payments()->exists() || $this->ledgerEntries()->exists();
     }
 }

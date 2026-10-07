@@ -215,3 +215,26 @@
 - A data-driven test iterates over every route × each default role and asserts 200/403 against this matrix.
 - Policy tests cover the record-level rules in §4.
 - An export test asserts that cost and profit columns are absent for roles without `products.view_cost` / `reports.profit`.
+
+---
+
+## 7. Phase 4 route map (as enforced)
+
+Every route below is protected twice: by route middleware (`can:`) and, for the actions, again inside the controller. "Password" means the user must have re-typed their password in the last 10 minutes (`password.confirm`). Tests: `Phase4RoleMatrixTest` runs every route against all four default roles.
+
+| Screen / action | Permission | Password |
+|---|---|:-:|
+| Purchases list, view, print, product lookup | `purchases.view` | |
+| New / edit / delete a **draft** | `purchases.create` | |
+| Receive (also "Save & receive") | `purchases.receive` (checked before anything is saved) | |
+| Cancel a received purchase | `purchases.void` | ✅ |
+| Supplier payments list, view | `supplier_payments.view` | |
+| Record a payment, apply an advance | `supplier_payments.create` | |
+| Cancel a payment | `supplier_payments.void` | ✅ |
+| Supplier profile, account statement, printed statement | `suppliers.view` | |
+| Opening balance / balance correction | `suppliers.adjust_balance` (Admin only) | ✅ |
+| Payment methods: view (Settings tab) | `settings.view` | |
+| Payment methods: add, rename, switch off, delete | `settings.manage` (Admin only) | |
+| Dashboard "Owed to suppliers" tile | `dashboard.financials` **and** `suppliers.view` | |
+
+Cashier and Technician hold none of the purchase, supplier-payment or supplier permissions, so they cannot reach any of these screens and never see purchase costs or what the shop owes.
