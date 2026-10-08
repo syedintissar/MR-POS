@@ -42,6 +42,10 @@ export function posApp(cfg, env = {}) {
         key: uuid(),             // one per checkout attempt: the server never makes two sales from one key
         approvalToken: null,
 
+        // ---- the customer (null = the walk-in customer, who pays in full)
+        customer: cfg.customer ?? null,
+        cust: { open: false, query: '', results: [], busy: false, seq: 0, timer: null, adding: false, form: { name: '', phone: '', company: '' }, error: '', duplicate: false, allow: false },
+
         // ---- search
         query: '', results: [], quick: [], category: null, searching: false, timer: null, pendingEnter: false, searchSeq: 0,
 
@@ -65,11 +69,13 @@ export function posApp(cfg, env = {}) {
         init() {
             this.loadQuick();
             this.restore();
+            if (this.cfg.customer) this.useCustomer(this.cfg.customer);   // "Sell to this customer" on a customer's page
+            else if (this.customer) this.refreshCustomer();               // a restored cart: the balance may have changed since
 
             // Anything typed into the cart (a quantity box, a price, a note) is remembered, not only the buttons.
             if (this.$watch) {
                 this.$watch('lines', () => this.save(), { deep: true });
-                for (const field of ['tier', 'invMode', 'invValue', 'notes', 'printNotes']) this.$watch(field, () => this.save());
+                for (const field of ['tier', 'invMode', 'invValue', 'notes', 'printNotes', 'customer']) this.$watch(field, () => this.save());
             }
         },
 
@@ -270,6 +276,7 @@ export function posApp(cfg, env = {}) {
             this.invValue = '';
             this.notes = '';
             this.printNotes = false;
+            this.customer = null;
             this.approvalToken = null;
             this.warnings = [];
             this.error = '';
@@ -283,13 +290,146 @@ export function posApp(cfg, env = {}) {
             this.save();
         },
 
+        // ------------------------------------------------------------------------------------------------ the customer
+
+        /** Sell to this customer (null = the walk-in customer). A wholesale customer gets the wholesale price list. */
+        useCustomer(c) {
+            const previous = this.customer;
+            this.customer = c ? { ...c } : null;
+            this.cust.open = false;
+            if (c && c.tier && c.tier !== this.tier) this.setTier(c.tier);
+            else if (!c && previous?.tier === 'wholesale' && this.tier === 'wholesale') this.setTier('retail');
+            this.save();
+        },
+
+        openCustomer() {
+            if (!this.cfg.can.customers || this.submitting || this.pay.open) return;
+            clearTimeout(this.cust.timer);
+            this.cust = { open: true, query: '', results: [], busy: false, seq: this.cust.seq + 1, timer: null, adding: false, form: { name: '', phone: '', company: '' }, error: '', duplicate: false, allow: false };
+        },
+
+        closeCustomer() {
+            clearTimeout(this.cust.timer);
+            this.cust.open = false;
+        },
+
+        onCustomerInput() {
+            clearTimeout(this.cust.timer);
+            this.cust.timer = setTimeout(() => this.searchCustomers(), 200);
+        },
+
+        async searchCustomers() {
+            const term = this.cust.query.trim();
+            const seq = ++this.cust.seq;
+            if (term === '') { this.cust.results = []; this.cust.busy = false; return; }
+
+            this.cust.busy = true;
+            try {
+                const r = await this.http('GET', `${this.cfg.urls.customerSearch}?${new URLSearchParams({ q: term })}`);
+                if (seq !== this.cust.seq) return;   // an older answer arriving late must not replace a newer one
+                this.cust.results = r.ok ? r.data : [];
+            } catch {
+                if (seq === this.cust.seq) this.cust.results = [];
+            } finally {
+                if (seq === this.cust.seq) this.cust.busy = false;
+            }
+        },
+
+        startAddCustomer() {
+            if (!this.cfg.can.addCustomer) return;
+            this.cust.adding = true;
+            this.cust.error = '';
+            this.cust.duplicate = false;
+            this.cust.allow = false;
+            const typed = this.cust.query.trim();
+            if (typed !== '') {
+                if (/^[0-9+\-\s()]{6,}$/.test(typed)) this.cust.form.phone = typed;
+                else this.cust.form.name = typed;
+            }
+        },
+
+        /** Adds a customer from the till. The server refuses a phone number that already belongs to someone until the cashier confirms. */
+        async quickAdd() {
+            const f = this.cust.form;
+            if (f.name.trim() === '') { this.cust.error = 'Enter the customer\'s name.'; return; }
+            if (this.cust.busy) return;
+
+            this.cust.busy = true;
+            this.cust.error = '';
+            try {
+                const r = await this.http('POST', this.cfg.urls.customerStore, {
+                    name: f.name.trim(), phone: f.phone.trim() || null, company: f.company.trim() || null, allow_duplicate_phone: this.cust.allow,
+                });
+                if (r.ok) { this.useCustomer(r.data); return; }
+                if (r.status === 409 && r.data?.error === 'duplicate_phone') {
+                    this.cust.duplicate = true;
+                    this.cust.error = r.data.message;
+                } else if (r.status === 422 && r.data?.errors) {
+                    this.cust.error = Object.values(r.data.errors).flat()[0];
+                } else {
+                    this.cust.error = r.data?.message || 'The customer could not be saved.';
+                }
+            } catch {
+                this.cust.error = 'The server could not be reached.';
+            } finally {
+                this.cust.busy = false;
+            }
+        },
+
+        /** Fresh balance and credit for the customer on screen (a cart restored after a refresh may be hours old). */
+        async refreshCustomer() {
+            const c = this.customer;
+            if (!c || !this.cfg.can.customers) return;
+            try {
+                const r = await this.http('GET', `${this.cfg.urls.customerSearch}?${new URLSearchParams({ q: c.code })}`);
+                const fresh = r.ok ? r.data.find((x) => x.id === c.id) : null;
+                if (fresh && this.customer?.id === c.id) this.customer = { ...fresh };
+            } catch { /* keep what is on screen: the server checks everything again when the sale is made */ }
+        },
+
+        /** Credit the customer holds from earlier payments, as a number of cents (0n when unknown). */
+        get creditHeld() {
+            return this.customer?.advance ? parse(this.customer.advance, 2) : 0n;
+        },
+
+        get creditUsed() {
+            return this.pay.rows.filter((r) => this.method(r.method)?.kind === 'customer_credit').reduce((a, r) => a + parse(r.amount, 2), 0n);
+        },
+
+        /** What the sale leaves unpaid on a customer who may buy on credit; 0 for everybody else. */
+        get onAccount() {
+            const d = parse(this.total, 2) - parse(this.paid, 2);
+
+            return this.customer?.allow_credit && d > 0n ? format(d, 2) : '0.00';
+        },
+
+        /** What the customer would owe after this sale; null when the cashier may not see customer balances. */
+        get balanceAfter() {
+            const b = this.customer?.balance;
+            if (b === null || b === undefined) return null;
+            const total = parse(this.total, 2);
+            const paid = parse(this.paid, 2);
+            const real = (paid < total ? paid : total) - this.creditUsed;
+
+            return format(parse(b, 2) + total - real, 2);
+        },
+
+        /** Would this sale take the customer past their credit limit? (A manager's approval is then asked for.) */
+        get overLimit() {
+            const limit = this.customer?.credit_limit;
+            const after = this.balanceAfter;
+            if (limit === null || limit === undefined || after === null || parse(this.onAccount, 2) === 0n) return false;
+
+            return parse(after, 2) > parse(limit, 2);
+        },
+
         // ------------------------------------------------------------------------------------------------ keeping the cart safe
 
         save() {
             try {
                 if (!storage) return;
                 if (!this.lines.length) { storage.removeItem(STORAGE_KEY); return; }
-                storage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), lines: this.lines, tier: this.tier, invMode: this.invMode, invValue: this.invValue, notes: this.notes, printNotes: this.printNotes, key: this.key }));
+                storage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), lines: this.lines, tier: this.tier, invMode: this.invMode, invValue: this.invValue, notes: this.notes, printNotes: this.printNotes, key: this.key, customer: this.customer }));
             } catch { /* private mode or full storage: the cart just is not remembered */ }
         },
 
@@ -300,7 +440,7 @@ export function posApp(cfg, env = {}) {
                 if (!raw) return;
                 const s = JSON.parse(raw);
                 if (!s.lines?.length || Date.now() - (s.at || 0) > 12 * 3600 * 1000) { storage.removeItem(STORAGE_KEY); return; }
-                Object.assign(this, { lines: s.lines, tier: s.tier ?? 'retail', invMode: s.invMode ?? 'amt', invValue: s.invValue ?? '', notes: s.notes ?? '', printNotes: !!s.printNotes, key: s.key || uuid() });
+                Object.assign(this, { lines: s.lines, tier: s.tier ?? 'retail', invMode: s.invMode ?? 'amt', invValue: s.invValue ?? '', notes: s.notes ?? '', printNotes: !!s.printNotes, key: s.key || uuid(), customer: s.customer ?? null });
                 this.restored = true;
             } catch { /* ignore a damaged saved cart */ }
         },
@@ -311,8 +451,17 @@ export function posApp(cfg, env = {}) {
             return this.cfg.methods.find((m) => m.kind === 'cash') ?? this.cfg.methods[0];
         },
 
+        /** The till's payment methods, plus "Customer credit" when the customer on screen holds some. */
+        get availableMethods() {
+            if (this.creditHeld > 0n && this.cfg.creditMethodId) {
+                return [...this.cfg.methods, { id: this.cfg.creditMethodId, name: 'Customer credit', kind: 'customer_credit', ref: false }];
+            }
+
+            return this.cfg.methods;
+        },
+
         method(id) {
-            return this.cfg.methods.find((m) => m.id === Number(id));
+            return this.availableMethods.find((m) => m.id === Number(id));
         },
 
         openPayment() {
@@ -331,6 +480,22 @@ export function posApp(cfg, env = {}) {
         },
 
         removePayRow(i) { this.pay.rows.splice(i, 1); },
+
+        /** Leave the whole sale on the customer's account (only offered to customers with credit terms). */
+        payOnAccount() {
+            if (!this.customer?.allow_credit) return;
+            this.pay.rows = [{ method: this.cashMethod?.id ?? null, amount: '', reference: '' }];
+        },
+
+        /** Pay with the credit the customer holds first, the rest in cash. */
+        useCustomerCredit() {
+            if (this.creditHeld <= 0n || !this.cfg.creditMethodId) return;
+            const total = parse(this.total, 2);
+            const use = this.creditHeld < total ? this.creditHeld : total;
+            const rows = [{ method: this.cfg.creditMethodId, amount: format(use, 2), reference: '' }];
+            if (total - use > 0n) rows.push({ method: this.cashMethod?.id ?? null, amount: format(total - use, 2), reference: '' });
+            this.pay.rows = rows;
+        },
         fillExact(row) {
             const others = this.pay.rows.filter((r) => r !== row).reduce((a, r) => a + parse(r.amount, 2), 0n);
             const left = parse(this.total, 2) - others;
@@ -360,13 +525,19 @@ export function posApp(cfg, env = {}) {
             const total = parse(this.total, 2);
             const paid = parse(this.paid, 2);
             if (total === 0n) return this.pay.rows.some((r) => parse(r.amount, 2) > 0n) ? 'This sale is free: there is nothing to pay.' : '';
-            if (paid < total) return `${pretty(total - paid, this.cfg.decimals)} is still missing. The walk-in customer pays in full.`;
-            if (paid > total && this.change === '0.00') return 'Only cash can be handed over in excess; card, bank and wallet payments must be exact.';
+            if (paid < total) {
+                const short = pretty(total - paid, this.cfg.decimals);
+                if (!this.customer) return `${short} is still missing. The walk-in customer pays in full: choose a customer to sell on credit.`;
+                if (!this.customer.allow_credit) return `${short} is still missing. ${this.customer.name} is not allowed credit, so the sale must be paid in full.`;
+            } else if (paid > total && this.change === '0.00') {
+                return 'Only cash can be handed over in excess; card, bank and wallet payments must be exact.';
+            }
             for (const r of this.pay.rows) {
                 const m = this.method(r.method);
                 if (!m) return 'Choose how each amount is paid.';
                 if (m.ref && parse(r.amount, 2) > 0n && !String(r.reference).trim()) return `${m.name} needs a reference number.`;
             }
+            if (this.creditUsed > this.creditHeld) return `${this.customer?.name ?? 'The customer'} has only ${pretty(this.creditHeld, this.cfg.decimals)} of credit.`;
 
             return '';
         },
@@ -376,6 +547,7 @@ export function posApp(cfg, env = {}) {
         payload() {
             return {
                 idempotency_key: this.key,
+                customer_id: this.customer?.id ?? null,
                 price_tier: this.tier,
                 lines: this.lines.map((l) => {
                     const row = { product_id: l.id, quantity: String(l.qty) };
@@ -501,6 +673,7 @@ export function posApp(cfg, env = {}) {
             return {
                 lines: this.lines.map((l) => ({ id: l.id, qty: l.qty, price: l.price, priceEdited: l.priceEdited, disc: l.disc, discMode: l.discMode, serial: l.serial })),
                 tier: this.tier, invMode: this.invMode, invValue: this.invValue, notes: this.notes, printNotes: this.printNotes,
+                customer_id: this.customer?.id ?? null,
                 meta: { total: this.total },
             };
         },
@@ -536,6 +709,8 @@ export function posApp(cfg, env = {}) {
 
             const c = r.data.cart;
             this.lines = lines;
+            this.customer = r.data.customer ?? null;   // the server sends the customer as they are today (inactive or deleted: back to walk-in)
+            if (c.customer_id && !this.customer) warnings.push('The customer on this cart is no longer available: it is back to the walk-in customer.');
             this.tier = c.tier ?? 'retail';
             this.invMode = c.invMode ?? 'amt';
             this.invValue = c.invValue ?? '';
@@ -560,11 +735,13 @@ export function posApp(cfg, env = {}) {
             if (k === 'Escape') {
                 if (this.approval.open) this.cancelApproval();
                 else if (this.pay.open) this.closePayment();
+                else if (this.cust.open) this.closeCustomer();
                 else if (this.hold.open) this.hold.open = false;
                 else if (this.resume.open) this.resume.open = false;
                 return;
             }
             if (k === 'F2') { event.preventDefault(); globalThis.document?.getElementById('pos-search')?.focus(); }
+            else if (k === 'F4') { event.preventDefault(); this.openCustomer(); }
             else if (k === 'F8') { event.preventDefault(); this.openHold(); }
             else if (k === 'F9') { event.preventDefault(); this.openPayment(); }
             else if (k === 'F10') { event.preventDefault(); if (this.pay.open) this.complete(); else this.openPayment(); }

@@ -7,52 +7,92 @@
 
 @theme {
     /* System fonts only: the shop PC may be offline, so nothing is loaded from the internet. */
-    --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
 
-    --color-brand-50: #eef6ff;
-    --color-brand-100: #d9eaff;
-    --color-brand-500: #2563eb;
-    --color-brand-600: #1d4ed8;
-    --color-brand-700: #1e40af;
-    --color-brand-900: #172554;
+    /* The brand: the red of the "R" and the charcoal of the "M" (public/brand/mr-logo.svg). Red is for the main action,
+       the active menu item, focus rings and links; errors and danger keep their own red and wording. */
+    --color-brand-50: #fff1f1;
+    --color-brand-100: #ffe0e0;
+    --color-brand-200: #ffc7c8;
+    --color-brand-300: #ff9ea0;
+    --color-brand-400: #f26469;
+    --color-brand-500: #dc2a33;
+    --color-brand-600: #c0121b;
+    --color-brand-700: #9c0e16;
+    --color-brand-800: #7d0b12;
+    --color-brand-900: #5a080d;
+
+    /* Neutral greys taken from the logo instead of the blue-tinted default "slate" scale. */
+    --color-slate-50: #f8f8f9;
+    --color-slate-100: #f1f1f3;
+    --color-slate-200: #e4e4e7;
+    --color-slate-300: #d0d0d4;
+    --color-slate-400: #a1a1a6;
+    --color-slate-500: #75757a;
+    --color-slate-600: #55555a;
+    --color-slate-700: #424246;
+    --color-slate-800: #2f2f32;
+    --color-slate-900: #232325;
+    --color-slate-950: #151516;
+
+    --shadow-soft: 0 1px 2px rgb(16 16 20 / 0.04), 0 4px 14px -4px rgb(16 16 20 / 0.08);
+    --shadow-lift: 0 2px 4px rgb(16 16 20 / 0.05), 0 12px 28px -8px rgb(16 16 20 / 0.16);
+    --shadow-glow: 0 6px 18px -6px rgb(192 18 27 / 0.55);
+
+    --animate-fade-up: fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    --animate-fade-in: fade-in 0.2s ease-out backwards;
+    --animate-pop-in: pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    --animate-drift: drift 18s ease-in-out infinite alternate;
+
+    @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+    @keyframes drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(40px, 30px, 0) scale(1.12); } }
 }
 
 [x-cloak] { display: none !important; }
 
 @layer base {
-    body { @apply bg-slate-100 text-slate-800 antialiased; }
-    a { @apply text-brand-600; }
-    a:hover { @apply text-brand-700; }
+    :root { color-scheme: light; }
+    html { scroll-behavior: smooth; }
+    body { @apply bg-slate-50 text-slate-800 antialiased; background-image: radial-gradient(1200px 500px at 100% -10%, rgb(192 18 27 / 0.045), transparent 60%), radial-gradient(900px 500px at -10% 0%, rgb(66 66 70 / 0.05), transparent 55%); background-attachment: fixed; }
+    a { @apply text-brand-700 transition-colors duration-150; }
+    a:hover { @apply text-brand-600; }
+    ::selection { background: var(--color-brand-100); }
+    h1, h2, h3 { letter-spacing: -0.01em; }
 }
 
 @layer components {
     /* Buttons */
-    .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60; }
-    .btn-primary { @apply bg-brand-600 text-white hover:bg-brand-700; }
-    .btn-secondary { @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
-    .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
-    .btn-sm { @apply px-2.5 py-1 text-xs; }
-    a.btn-primary, a.btn-primary:hover, a.btn-danger, a.btn-danger:hover { @apply text-white; }
+    .btn { @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100; }
+    .btn-primary { @apply bg-gradient-to-b from-brand-500 to-brand-600 text-white hover:-translate-y-px hover:from-brand-600 hover:to-brand-700 hover:shadow-[var(--shadow-glow)]; }
+    .btn-secondary { @apply border border-slate-200 bg-white text-slate-700 hover:-translate-y-px hover:border-slate-300 hover:bg-slate-50 hover:shadow-md; }
+    /* Danger is an outline so it is never mistaken for the (red) main action */
+    .btn-danger { @apply border border-red-200 bg-white text-red-700 hover:border-red-600 hover:bg-red-600 hover:text-white; }
+    .btn-sm { @apply rounded-md px-2.5 py-1 text-xs; }
+    a.btn-primary, a.btn-primary:hover { @apply text-white; }
+    a.btn-danger { @apply text-red-700; }
+    a.btn-danger:hover { @apply text-white; }
     a.btn-secondary, a.btn-secondary:hover { @apply text-slate-700; }
 
     /* Forms */
     .label { @apply mb-1 block text-sm font-medium text-slate-700; }
-    .input { @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-100; }
-    .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500; }
+    .input { @apply block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition duration-150 placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:bg-slate-100; }
+    .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-100; }
     .help { @apply mt-1 text-xs text-slate-500; }
     .error-text { @apply mt-1 text-xs font-medium text-red-600; }
 
     /* Surfaces */
-    .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; }
+    .card { @apply rounded-xl border border-slate-200/80 bg-white shadow-[var(--shadow-soft)] transition-shadow duration-200 hover:shadow-[var(--shadow-lift)]; }
     .card-body { @apply p-5; }
-    .card-header { @apply flex items-center justify-between border-b border-slate-200 px-5 py-3; }
+    .card-header { @apply flex items-center justify-between border-b border-slate-100 px-5 py-3; }
     .card-title { @apply text-sm font-semibold text-slate-800; }
 
     /* Tables */
-    .table { @apply min-w-full divide-y divide-slate-200 text-sm; }
-    .table thead th { @apply bg-slate-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+    .table { @apply min-w-full divide-y divide-slate-100 text-sm; }
+    .table thead th { @apply bg-slate-50/80 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
     .table tbody td { @apply px-4 py-2.5 align-middle; }
-    .table tbody tr { @apply border-b border-slate-100 hover:bg-slate-50/60; }
+    .table tbody tr { @apply border-b border-slate-100 transition-colors duration-150 hover:bg-brand-50/40; }
 
     /* Badges */
     .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
@@ -62,10 +102,30 @@
     .badge-blue { @apply bg-blue-100 text-blue-800; }
     .badge-gray { @apply bg-slate-100 text-slate-700; }
 
-    /* Sidebar */
-    .nav-link { @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white; }
-    .nav-link.active { @apply bg-white/15 text-white; }
-    .nav-heading { @apply px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500; }
+    /* Sidebar (light) */
+    .nav-link { @apply relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition duration-150 ease-out hover:translate-x-0.5 hover:bg-slate-100 hover:text-slate-900; }
+    .nav-link::before { content: ''; @apply absolute left-0 top-1/2 h-0 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-all duration-200 ease-out; }
+    .nav-link.active { @apply bg-brand-50 font-semibold text-brand-700 hover:translate-x-0 hover:bg-brand-50 hover:text-brand-700; }
+    .nav-link.active::before { @apply h-6; }
+    .nav-link svg { @apply transition-transform duration-200 ease-out; }
+    .nav-link:hover svg { @apply scale-110; }
+    .nav-heading { @apply px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400; }
 
     .spinner { @apply inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent align-[-2px]; }
+
+    /* Motion: pages ease in, cards of a grid arrive one after another, dialogs pop in, the "sale completed" banner drops in.
+       Animations use fill-mode "backwards" so no transform is left behind (a leftover transform would trap position:fixed dialogs). */
+    main > :not(.grid) { animation: var(--animate-fade-up); }
+    main .grid > .card, main .grid > a.card { animation: var(--animate-fade-up); }
+    main .grid > :nth-child(2) { animation-delay: 0.05s; }
+    main .grid > :nth-child(3) { animation-delay: 0.1s; }
+    main .grid > :nth-child(4) { animation-delay: 0.15s; }
+    main .grid > :nth-child(n+5) { animation-delay: 0.2s; }
+    .fixed.inset-0:has(> :is(div, form)) { animation: var(--animate-fade-in); }
+    .fixed.inset-0 > :is(div, form) { animation: var(--animate-pop-in); }
+    [role='status'] { animation: var(--animate-fade-up); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after { animation-duration: 0.001ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }

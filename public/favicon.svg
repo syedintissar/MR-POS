@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372 372" role="img" aria-label="MR">
+  <defs>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3f3f3"/>
+      <stop offset="0.55" stop-color="#dcdcdc"/>
+      <stop offset="1" stop-color="#c9c9c9"/>
+    </linearGradient>
+    <linearGradient id="grey" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b5b5d"/>
+      <stop offset="1" stop-color="#3b3b3d"/>
+    </linearGradient>
+    <linearGradient id="greyFold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2f2f31"/>
+      <stop offset="1" stop-color="#4a4a4c"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d2121d"/>
+      <stop offset="1" stop-color="#a60b14"/>
+    </linearGradient>
+    <linearGradient id="redFold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7d0710"/>
+      <stop offset="1" stop-color="#b30c16"/>
+    </linearGradient>
+  </defs>
+  <circle cx="186" cy="186" r="184" fill="#ffffff"/>
+
+  <!-- the ring, tilted, passing behind the letters -->
+  <g transform="rotate(-18 190 190)" fill="none">
+    <ellipse cx="190" cy="190" rx="118" ry="142" stroke="url(#ring)" stroke-width="30"/>
+    <ellipse cx="190" cy="190" rx="136" ry="160" stroke="#ededed" stroke-width="5" opacity="0.9"/>
+    <ellipse cx="190" cy="190" rx="100" ry="124" stroke="#f7f7f7" stroke-width="4" opacity="0.9"/>
+  </g>
+
+  <!-- M -->
+  <path fill="url(#grey)" fill-rule="evenodd" d="M62 238V158Q62 130 92 130H112L136 188L160 130H178Q208 130 208 158V238H180V176L150 238H122L92 176V238Z"/>
+  <path fill="url(#greyFold)" d="M62 158Q62 130 92 130L100 150L92 176V238H62Z"/>
+  <path fill="#2c2c2e" opacity="0.55" d="M178 130Q208 130 208 158L180 176Z"/>
+
+  <!-- R -->
+  <path fill="url(#red)" fill-rule="evenodd" d="M232 238V130H298Q340 130 340 163Q340 192 306 198L344 238H306L274 202H262V238ZM262 156V178H296Q310 178 310 167Q310 156 296 156Z"/>
+  <path fill="url(#redFold)" d="M298 130Q340 130 340 163Q340 170 337 175Q318 160 288 160L298 130Z"/>
+</svg>

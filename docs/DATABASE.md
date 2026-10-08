@@ -912,7 +912,7 @@ Tables added in Phase 5 (migrations `2026_10_07_4000xx_*`): `customers`, `sales`
 
 | Item | As built | Why |
 |---|---|---|
-| `customers` | Created now with its full shape (§2.4), because every sale points at a customer. The migration inserts the **one walk-in customer** (`WALK-IN`). A generated column + `UNIQUE` index makes a second walk-in impossible, and `CHECK (is_walk_in = 0 OR (allow_credit = 0 AND balance = 0 AND opening_balance = 0))` enforces BR-11 in the database. There are no customer screens, ledger or credit yet: Phase 6 adds code, not schema | Walk-in sales need a customer row; the rule that the walk-in customer can never owe anything is too important to leave to application code |
+| `customers` | Created now with its full shape (§2.4), because every sale points at a customer. The migration inserts the **one walk-in customer** (`WALK-IN`). A generated column + `UNIQUE` index makes a second walk-in impossible, and `CHECK (is_walk_in = 0 OR (allow_credit = 0 AND balance = 0 AND opening_balance = 0))` enforces BR-11 in the database. Phase 6 added the customer ledger and the `sale_id` link on receipts (§12) and did not change this table | Walk-in sales need a customer row; the rule that the walk-in customer can never owe anything is too important to leave to application code |
 | `sales` | As §2.6, plus `tax_inclusive` (snapshot of whether the entered prices contained tax) and constraints: status, payment status, tier, non-negative amounts, and "voided exactly when `voided_at` is set". `invoice_no` and `idempotency_key` are unique | The snapshot keeps an old invoice readable when the tax setting changes later |
 | `sale_items` | As §2.6; names, SKU, list price, charged price, the line's share of the invoice discount, tax, net, total, **unit cost at the moment of sale**, serial number, warranty date, `returned_quantity <= quantity` (all `CHECK`ed) | An invoice never changes when a product is renamed or re-priced; profit uses the cost snapshot (BR-07) |
 | Payments | Every payment taken at the till is one `customer_payments` row (`receipt`, numbered `RCP-`) allocated by one `sale_payments` row to exactly one sale. **Change is not a payment**: only what the sale needed is recorded; `sales.amount_tendered` and `change_amount` keep the handover for the receipt | Phase 6 customer payments, voids and statements then work on the same two tables |
@@ -957,3 +957,46 @@ A manager types their own username and password on the cashier's screen. The ans
 8. Every invoice: `paid_amount`, `due_amount` and `payment_status` equal what its posted receipts imply (a cancelled invoice shows 0 and 0).
 9. A posted receipt is never allocated for more than its amount.
 10. Units on each invoice (stock items) equal what the stock ledger took out; a cancelled invoice's goods all went back; the walk-in customer's balance is 0.
+
+## 12. Phase 6 implementation notes (customers & receivables)
+
+Migrations `2026_10_08_500000_create_customer_ledger_table` and `2026_10_08_500100_add_sale_id_to_customer_payments`. Both were applied to the real `mrpos` database after a backup.
+
+| Item | As built | Why |
+|---|---|---|
+| `customer_ledger_entries` | Append-only, like the supplier ledger: `customer_id`, `entry_date`, `entry_type`, `debit`, `credit`, `source_type` / `source_id`, `description`, `created_by`, `created_at(6)`. `CHECK` that exactly one side is greater than zero and that the type is one of `opening_balance, sale, sale_void, service_invoice, service_void, payment, payment_void, refund, refund_void, sale_return, balance_adjustment`. Triggers `customer_ledger_no_update` / `customer_ledger_no_delete` refuse any edit or delete, even by hand in the database | The customer's account must be provable: every figure on a statement is a ledger line that can never be changed, only reversed by another line |
+| `customers.balance` | A cache of `Σ debit − Σ credit`: **positive = the customer owes the shop, negative = the shop holds the customer's money**. Written only by `CustomerAccountService::postEntry()` in the same transaction as the ledger line; `pos:integrity:check` recomputes it | Fast lists and the till; the ledger stays the truth |
+| `customer_payments.sale_id` | Nullable foreign key to `sales`. A receipt taken **at the till** belongs to its sale (`sale_id` set); a payment **collected later** from a customer has `sale_id = NULL` | A cancelled sale must cancel only its own till receipts, never money the customer paid on account |
+| Receipt numbers | Till receipts and collected payments share the `RCP-` sequence, so a customer's collected payments are not consecutive on their own | One gap-free sequence for every receipt the shop ever issues (BR-09) |
+
+### Sign conventions and "advance"
+- Customer balance = debits − credits. A sale is a debit; a payment is a credit; cancelling either writes the opposite line.
+- **Advance (credit the customer holds)** = the unallocated part of their posted receipts. Allocations to cancelled invoices do not count, so cancelling an invoice that was paid from the account gives the money back to the customer as credit again.
+- **"Customer credit" as a payment method at the till** spends that advance: it allocates the customer's existing receipts to the new invoice, oldest first, and writes **no ledger line**, because the customer's money is already on their account. It is refused for the walk-in customer and for more than the advance.
+
+### Posting rules as implemented
+| Operation | Customer ledger | Receipts / allocations | Other |
+|---|---|---|---|
+| Sale to a named customer (`CompleteSale`) | `sale` debit for the whole invoice; `payment` credit for each payment taken now | one receipt per payment line, `sale_id` set; credit used is allocated from earlier receipts | `paid`, `due` and status of the invoice follow its allocations; audited with `customer`, `on_account`, `customer_credit_used` |
+| Collect a payment (`PostCustomerPayment`) | `payment` credit for the whole amount | one receipt (`sale_id` NULL) allocated to open invoices: oldest first, or the invoices chosen, or none (kept as advance); the excess is advance | oldest-first uses the invoice **date**, not the order typed |
+| Cancel a collected payment (`VoidCustomerPayment`) | `payment_void` debit | receipt marked cancelled; its invoices are open again | reason required; password; audited |
+| Cancel a sale (`VoidSale`) | `sale_void` credit for the invoice; `payment_void` debit for the till receipts of that sale | only receipts with `sale_id` = this sale are cancelled; money collected later stays as the customer's credit | locks the customer first |
+| Opening balance / correction (`AdjustCustomerBalance`) | `opening_balance` once per customer; later `balance_adjustment` (either direction) | none | Administrator only (`customers.adjust_balance`), password, reason |
+| Apply an advance (`AllocateCustomerAdvance`) | none (no money moves) | allocates free receipt money to open invoices | |
+
+### Lock order and the "first read" rule
+Customer flows lock in this order: **idempotency key → customer → sale(s) / payment → products → number sequences → audit (last)**. Supplier flows are unchanged (supplier → purchases → products → sequences → audit).
+
+MariaDB's default isolation (REPEATABLE READ) fixes a transaction's *snapshot* at its first ordinary read. A locking read (`SELECT … FOR UPDATE`) sees the latest data, but an ordinary read afterwards sees the snapshot. If any ordinary read happens **before** the customer lock, the transaction wakes up from waiting for the lock with a stale picture of the customer's invoices and credit. Rule: **the customer lock must be the first read of the transaction.** `CompleteSale::customer()` and `VoidSale` follow it (a concurrency test once caught the credit being spent twice because the walk-in lookup came first; see DESIGN_REVIEW §9).
+
+### Statements and the aging report
+- **Statement** (`CustomerAccountService::statement`): optional date range; "brought forward" = the balance before the first day; each ledger line with a running balance; closing balance. Printable in the browser and as a PDF (dompdf, server-built, audited). It needs `customers.statement` **and** `customer_payments.view`.
+- **Aging** (`ReceivablesService`): unpaid invoices of named customers by invoice date, in bands Today / 1–30 / 31–60 / 61–90 / over 90 days. What a customer owes that is not on an invoice (an opening balance or correction), minus credit they hold, is shown as **Other**, so every row adds up to the customer's balance.
+
+### Who may see money
+`customers.view` shows names, phones and codes. Balances, credit limits, advances, payments and statements need `customer_payments.view` (and `customers.statement`, `reports.customers` for those screens). The till's customer search returns balances only to people who may see them; a Technician sees customers without any money.
+
+### Integrity checks added (`pos:integrity:check`, twice a day)
+11. Every customer's `balance` equals the sum of their ledger lines.
+12. Every invoice of a named customer is on the account exactly once (and reversed exactly once if cancelled; never reversed while completed).
+13. Every receipt from a named customer is on the account exactly once (and reversed exactly once if cancelled).

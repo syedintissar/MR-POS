@@ -10,6 +10,8 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\Auth\PasswordConfirmController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LabelController;
@@ -17,6 +19,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
@@ -111,6 +114,8 @@ Route::middleware('auth')->group(function () {
         Route::get('products/quick', [PosController::class, 'quick'])->name('pos.products.quick');
         Route::post('sales', [PosController::class, 'store'])->middleware('can:sales.create')->name('pos.sales.store');
         Route::post('approvals', [PosController::class, 'approve'])->middleware('can:sales.create')->name('pos.approvals');
+        Route::get('customers/search', [CustomerController::class, 'search'])->middleware('can:customers.view')->name('pos.customers.search');
+        Route::post('customers', [CustomerController::class, 'quickStore'])->middleware('can:customers.create')->name('pos.customers.store');
         Route::get('held', [PosController::class, 'held'])->middleware('can:sales.hold')->name('pos.held.index');
         Route::post('held', [PosController::class, 'hold'])->middleware('can:sales.hold')->name('pos.held.store');
         Route::get('held/{held}', [PosController::class, 'resume'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.show');
@@ -125,6 +130,43 @@ Route::middleware('auth')->group(function () {
         Route::get('{sale}/pdf', [SaleController::class, 'pdf'])->whereNumber('sale')->name('sales.pdf');
         Route::post('{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.void', 'password.confirm'])->name('sales.void');
     });
+
+    // ---- Phase 6: customers, receivables and customer payments ------------------------------------------------
+
+    Route::prefix('customers')->group(function () {
+        Route::middleware('can:customers.view')->get('/', [CustomerController::class, 'index'])->name('customers.index');
+        Route::middleware('can:customers.create')->group(function () {
+            Route::get('create', [CustomerController::class, 'create'])->name('customers.create');
+            Route::post('/', [CustomerController::class, 'store'])->name('customers.store');
+        });
+        Route::get('{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->middleware('can:customers.view')->name('customers.show');
+        Route::middleware('can:customers.edit')->group(function () {
+            Route::get('{customer}/edit', [CustomerController::class, 'edit'])->whereNumber('customer')->name('customers.edit');
+            Route::put('{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('customers.update');
+            Route::post('{customer}/toggle', [CustomerController::class, 'toggle'])->whereNumber('customer')->name('customers.toggle');
+        });
+        Route::delete('{customer}', [CustomerController::class, 'destroy'])->whereNumber('customer')->middleware(['can:customers.delete', 'password.confirm'])->name('customers.destroy');
+        Route::middleware('can:customers.statement')->group(function () {
+            Route::get('{customer}/statement', [CustomerController::class, 'statement'])->whereNumber('customer')->name('customers.statement');
+            Route::get('{customer}/statement.pdf', [CustomerController::class, 'statementPdf'])->whereNumber('customer')->name('customers.statement.pdf');
+        });
+        Route::post('{customer}/adjust-balance', [CustomerController::class, 'adjustBalance'])->whereNumber('customer')->middleware(['can:customers.adjust_balance', 'password.confirm'])->name('customers.adjust-balance');
+        Route::post('{customer}/apply-advance', [CustomerController::class, 'applyAdvance'])->whereNumber('customer')->middleware('can:customer_payments.create')->name('customers.apply-advance');
+    });
+
+    Route::prefix('customer-payments')->group(function () {
+        Route::get('/', [CustomerPaymentController::class, 'index'])->middleware('can:customer_payments.view')->name('customer-payments.index');
+        Route::middleware('can:customer_payments.create')->group(function () {
+            Route::get('create', [CustomerPaymentController::class, 'create'])->name('customer-payments.create');
+            Route::post('/', [CustomerPaymentController::class, 'store'])->name('customer-payments.store');
+        });
+        Route::get('{payment}', [CustomerPaymentController::class, 'show'])->whereNumber('payment')->middleware('can:customer_payments.view')->name('customer-payments.show');
+        Route::post('{payment}/void', [CustomerPaymentController::class, 'void'])->whereNumber('payment')->middleware(['can:customer_payments.void', 'password.confirm'])->name('customer-payments.void');
+        Route::get('{payment}/receipt', [CustomerPaymentController::class, 'receipt'])->whereNumber('payment')->middleware('signed')->name('customer-payments.receipt');
+        Route::get('{payment}/reprint', [CustomerPaymentController::class, 'reprint'])->whereNumber('payment')->name('customer-payments.reprint');
+    });
+
+    Route::get('receivables', [ReceivablesController::class, 'index'])->middleware('can:reports.customers')->name('receivables.index');
 
     // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------
 

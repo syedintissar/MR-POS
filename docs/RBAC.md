@@ -261,3 +261,30 @@ Every route is protected by route middleware (`can:`) and again inside the actio
 | See cost and profit on an invoice | `products.view_cost` | |
 
 Cashiers can sell, hold, reprint and see **their own** sales; they cannot cancel a sale, change a price, give a large discount or see cost, profit or other people's invoices. Technicians have none of these.
+
+## 9. Phase 6 route map (as enforced)
+
+Every route is protected by route middleware (`can:`) and again inside the action that does the work. "Password" means the user re-typed their password in the last 10 minutes. Tests: `Phase6RoleMatrixTest` runs every route against all four default roles (88 cases); `CustomerWebTest`, `CustomerPaymentWebTest` cover the rest.
+
+| Screen / action | Permission | Password |
+|---|---|:-:|
+| Customer list and profile (names, phones, codes) | `customers.view` | |
+| See balances, credit limits, advances, open invoices and payment history on those screens | `customer_payments.view` (otherwise the money is left out) | |
+| Add a customer (page or the till's quick add) | `customers.create` | |
+| Edit, activate / deactivate a customer | `customers.edit` | |
+| Change **credit terms and price list** | `sales.override_credit_limit` (a cashier's edit keeps the existing terms) | |
+| Delete a customer (only one with no history) | `customers.delete` | ✅ |
+| Opening balance, balance adjustment | `customers.adjust_balance` (Administrator only) | ✅ |
+| Statement (page and PDF) | `customers.statement` **and** `customer_payments.view` | |
+| Collected payments list and one payment | `customer_payments.view` | |
+| Collect a payment, apply a customer's advance to invoices | `customer_payments.create` | |
+| Cancel a collected payment | `customer_payments.void` (managers) | ✅ |
+| Original payment receipt | a signed link, valid ten minutes | |
+| Reprint a payment receipt (marked DUPLICATE, audited) | `sales.reprint` (and `customer_payments.view`) | |
+| "Who owes us" aging report | `reports.customers` | |
+| Customer search and quick add at the till | `pos.access` with `customers.view` / `customers.create` | |
+| Sell on credit (part or none paid now) | `sales.credit`, or a manager's approval | |
+| Go over a customer's credit limit | `sales.override_credit_limit`, or a manager's approval | |
+| Dashboard tile "Owed by customers" | `dashboard.financials` and `customers.view` | |
+
+Cashiers can add customers, see balances, sell on credit within a limit and collect payments; they cannot give credit terms, cancel a payment, delete a customer, set an opening balance or open the aging report. Technicians can find customers (names and phones) and nothing else: no balances, no payments, no statements.

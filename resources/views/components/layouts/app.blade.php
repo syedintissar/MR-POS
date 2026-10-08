@@ -4,6 +4,8 @@
     $shop = $settings->string('shop.name') ?: config('app.name');
     $user = auth()->user();
     $hasLogo = $settings->string('shop.logo_path') !== '';
+    // the owner's uploaded logo (Settings > Shop) wins; otherwise the built-in MR mark
+    $logoUrl = $hasLogo ? route('branding.logo') : asset('brand/mr-logo.svg');
 
     // Critical backup problems show as a red dot next to "Backups" (cached for a minute to keep pages fast).
     $backupAlert = false;
@@ -40,7 +42,12 @@
         ['label' => 'Point of sale', 'route' => 'pos.index', 'match' => 'pos.*', 'can' => 'pos.access', 'icon' => 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'],
         ['label' => 'Sales', 'route' => 'sales.index', 'match' => 'sales.*', 'can' => 'sales.view_all|sales.view_own', 'icon' => 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z'],
     ];
-    $groups = ['' => $nav, 'Selling' => $selling, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];
+    $customersNav = [
+        ['label' => 'Customers', 'route' => 'customers.index', 'match' => 'customers.*', 'can' => 'customers.view', 'icon' => 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
+        ['label' => 'Customer payments', 'route' => 'customer-payments.index', 'match' => 'customer-payments.*', 'can' => 'customer_payments.view', 'icon' => 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'],
+        ['label' => 'Who owes us', 'route' => 'receivables.index', 'match' => 'receivables.*', 'can' => 'reports.customers', 'icon' => 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'],
+    ];
+    $groups = ['' => $nav, 'Selling' => $selling, 'Customers' => $customersNav, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -48,22 +55,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#ffffff">
     <title>{{ $title }} · {{ $shop }}</title>
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body x-data="{ menu: false }">
 <div class="flex min-h-screen">
     {{-- Sidebar --}}
     <div x-show="menu" x-cloak x-transition.opacity class="fixed inset-0 z-30 bg-slate-900/50 lg:hidden" @click="menu = false"></div>
-    <aside class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full transform overflow-y-auto bg-slate-900 p-3 transition lg:translate-x-0"
+    <aside class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full transform overflow-y-auto border-r border-slate-200/80 bg-white p-3 shadow-[var(--shadow-soft)] transition duration-300 ease-out lg:translate-x-0"
            :class="{ 'translate-x-0': menu }">
-        <a href="{{ route('dashboard') }}" class="mb-2 flex items-center gap-2.5 rounded-md px-2 py-3 text-white hover:text-white">
-            @if($hasLogo)
-                <img src="{{ route('branding.logo') }}" alt="" class="h-9 w-9 rounded bg-white object-contain p-0.5">
-            @else
-                <span class="flex h-9 w-9 items-center justify-center rounded bg-brand-600 text-sm font-bold">{{ \Illuminate\Support\Str::of($shop)->substr(0, 1)->upper() }}</span>
-            @endif
-            <span class="text-sm font-semibold leading-tight">{{ $shop }}</span>
+        <a href="{{ route('dashboard') }}" class="group mb-3 flex items-center gap-3 rounded-lg border-b border-slate-100 px-2 pb-4 pt-3 text-slate-800 hover:text-slate-800">
+            <img src="{{ $logoUrl }}" alt="" class="h-12 w-12 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-md ring-1 ring-slate-200 transition duration-300 group-hover:rotate-6 group-hover:scale-105">
+            <span class="text-sm font-semibold leading-tight">{{ $shop }}<span class="mt-0.5 block text-[11px] font-normal text-slate-500">Point of sale &amp; service</span></span>
         </a>
 
         <nav class="space-y-0.5">
@@ -88,7 +95,7 @@
 
     {{-- Main --}}
     <div class="flex min-w-0 flex-1 flex-col lg:pl-64">
-        <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4 shadow-sm">
+        <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-t-2 border-slate-200 border-t-brand-600 bg-white/80 px-4 shadow-sm backdrop-blur-md">
             <button type="button" class="rounded p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" @click="menu = true" aria-label="Open menu">
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>

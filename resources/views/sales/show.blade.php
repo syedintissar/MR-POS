@@ -10,7 +10,7 @@
                 <h2 class="text-xl font-semibold text-slate-900">{{ Money::withSymbol($sale->grand_total) }}</h2>
                 <div class="mt-1 text-sm text-slate-500">
                     {{ $sale->sale_date->format('d M Y, H:i') }} · sold by {{ $sale->cashier?->name ?? 'system' }}
-                    · {{ $sale->customer->is_walk_in ? 'walk-in customer' : $sale->customer->name }}
+                    · @if($sale->customer->is_walk_in)walk-in customer @else @can('customers.view')<a href="{{ route('customers.show', $sale->customer_id) }}">{{ $sale->customer->name }}</a>@else{{ $sale->customer->name }}@endcan @endif
                     @if($sale->price_tier === 'wholesale') · <span class="badge badge-blue">wholesale prices</span>@endif
                     @if($sale->approver) · approved by {{ $sale->approver->name }}@endif
                 </div>
@@ -18,6 +18,7 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 @if($sale->isVoided())<span class="badge badge-red text-sm">Cancelled</span>@elseif($sale->payment_status === 'paid')<span class="badge badge-green text-sm">Paid</span>@else<span class="badge badge-amber text-sm">{{ $sale->payment_status }}</span>@endif
+                @if(! $sale->isVoided() && (float) $sale->due_amount > 0 && ! $sale->customer->is_walk_in)@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $sale->customer_id, 'sale' => $sale->id]) }}" class="btn btn-primary btn-sm">Collect payment</a>@endcan @endif
                 @if($canReprint)
                     <a href="{{ route('sales.reprint', [$sale, 'thermal']) }}" target="_blank" class="btn btn-secondary btn-sm">Print receipt (copy)</a>
                     <a href="{{ route('sales.reprint', [$sale, 'a4']) }}" target="_blank" class="btn btn-secondary btn-sm">Print A4 invoice (copy)</a>

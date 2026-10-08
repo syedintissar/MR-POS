@@ -1,0 +1,83 @@
+@php
+    use App\Support\Money;
+
+    $width = (int) $s->get('printing.paper_width_mm');
+    $mt = $s->get('printing.margin_top_mm'); $mr = $s->get('printing.margin_right_mm'); $mb = $s->get('printing.margin_bottom_mm'); $ml = $s->get('printing.margin_left_mm');
+    $font = $s->get('printing.font_size_pt');
+    $shop = $s->string('shop.name') ?: config('app.name');
+    $voided = $payment->isVoided();
+@endphp
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ $payment->receipt_no }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        @page { size: {{ $width }}mm auto; margin: {{ $mt }}mm {{ $mr }}mm {{ $mb }}mm {{ $ml }}mm; }
+        html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+        body { width: {{ $width - $ml - $mr }}mm; font-family: Consolas, 'Lucida Console', 'Courier New', monospace; font-size: {{ $font }}pt; line-height: 1.25; }
+        .copy { page-break-after: always; break-after: page; padding-bottom: 2mm; }
+        .copy:last-child { page-break-after: auto; break-after: auto; }
+        .c { text-align: center; } .b { font-weight: 700; }
+        .shop { font-size: {{ $font + 3 }}pt; font-weight: 700; }
+        .logo { max-height: 14mm; max-width: 60%; margin: 0 auto 1mm; display: block; }
+        .sep { border-top: 1px dashed #000; margin: 1.5mm 0; }
+        .row { display: flex; justify-content: space-between; gap: 2mm; }
+        .row > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; } .row > span:last-child { white-space: nowrap; }
+        .small { font-size: {{ max(6, $font - 1.5) }}pt; }
+        .total { font-size: {{ $font + 3 }}pt; font-weight: 700; }
+        .banner { border: 2px solid #000; text-align: center; font-weight: 700; font-size: {{ $font + 3 }}pt; padding: 1mm; margin: 1.5mm 0; letter-spacing: 1px; }
+        .bc { text-align: center; margin-top: 1.5mm; } .bc svg { width: 80%; height: 11mm; }
+        .bar { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; padding: 8px 12px; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; }
+        .bar button { padding: 4px 12px; margin-right: 8px; }
+        @media print { .bar { display: none; } }
+    </style>
+</head>
+<body>
+@unless($autoprint)
+    <div class="bar"><button type="button" onclick="window.print()">Print</button> {{ $payment->receipt_no }} · payment receipt{{ $voided ? ' · marked VOID' : ($duplicate ? ' · marked DUPLICATE' : '') }}</div>
+@endunless
+@for($copy = 1; $copy <= $copies; $copy++)
+<div class="copy">
+    <div class="c">
+        @if($logo)<img src="{{ $logo }}" alt="" class="logo">@endif
+        <div class="shop">{{ $shop }}</div>
+        @if($s->string('shop.address'))<div>{{ $s->string('shop.address') }}</div>@endif
+        @if($s->string('shop.phone'))<div>Tel: {{ $s->string('shop.phone') }}</div>@endif
+    </div>
+
+    @if($voided)<div class="banner">*** VOID ***</div>@elseif($duplicate)<div class="banner">DUPLICATE</div>@endif
+
+    <div class="sep"></div>
+    <div class="row"><span class="b">PAYMENT RECEIPT</span><span class="b">{{ $payment->receipt_no }}</span></div>
+    <div class="row"><span>{{ $payment->payment_date->format('d/m/Y') }}</span><span>{{ $payment->payment_date->format('H:i') }}</span></div>
+    @if($s->bool('receipt.show_cashier') && $payment->creator)<div>Received by: {{ $payment->creator->name }}</div>@endif
+    <div>From: {{ $payment->customer->is_walk_in ? 'Walk-in customer' : $payment->customer->name }}</div>
+    <div class="sep"></div>
+
+    <div class="row total"><span>RECEIVED</span><span>{{ Money::symbol() }} {{ Money::format($payment->amount) }}</span></div>
+    <div class="row"><span>{{ $payment->method->name }}{{ $payment->reference_no ? ' ('.$payment->reference_no.')' : '' }}</span><span></span></div>
+
+    @if($payment->allocations->isNotEmpty())
+        <div class="sep"></div>
+        <div class="small">Paid towards:</div>
+        @foreach($payment->allocations as $a)
+            <div class="row small"><span>{{ $a->sale->invoice_no }}</span><span>{{ Money::format($a->amount) }}</span></div>
+        @endforeach
+    @endif
+    @if($balance !== null)
+        <div class="sep"></div>
+        <div class="row b"><span>{{ (float) $balance < 0 ? 'Credit with us' : 'Balance still due' }}</span><span>{{ Money::format(abs((float) $balance)) }}</span></div>
+    @endif
+
+    @if($s->string('receipt.footer'))<div class="sep"></div><div class="c small">{{ $s->string('receipt.footer') }}</div>@endif
+    @if($barcode)<div class="bc">{!! $barcode !!}<div class="small">{{ $payment->receipt_no }}</div></div>@endif
+</div>
+@endfor
+@if($autoprint)
+<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 150); });</script>
+@endif
+</body>
+</html>

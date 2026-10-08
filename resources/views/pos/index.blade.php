@@ -8,6 +8,8 @@
                     <div class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Sale completed</div>
                     <div class="text-lg font-semibold text-emerald-900"><span x-text="done.invoice_no"></span> · <span x-text="cfg.currency + ' ' + money(done.total)"></span></div>
                     <div class="text-2xl font-bold text-emerald-800" x-show="parseFloat(done.change) > 0">Change to give: <span x-text="cfg.currency + ' ' + money(done.change)"></span></div>
+                    <div class="text-sm text-emerald-800" x-show="done.customer">Sold to <strong x-text="done.customer"></strong></div>
+                    <div class="text-xl font-bold text-amber-700" x-show="parseFloat(done.due || 0) > 0">Left on account: <span x-text="cfg.currency + ' ' + money(done.due)"></span></div>
                     <div class="text-xs text-emerald-700" x-show="done.replayed">This sale had already been recorded; no second sale was made.</div>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -90,6 +92,29 @@
                         </div>
                     </div>
 
+                    @if($config['can']['customers'])
+                        <div class="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm" id="pos-customer-bar">
+                            <div class="min-w-0">
+                                <template x-if="!customer"><span class="text-slate-600">Customer: <strong class="text-slate-900">Walk-in</strong> <span class="text-xs text-slate-500">(pays in full)</span></span></template>
+                                <template x-if="customer">
+                                    <div class="min-w-0">
+                                        <div class="truncate font-medium text-slate-900"><span x-text="customer.name"></span> <span class="rounded bg-slate-200 px-1 text-[10px] uppercase text-slate-600" x-show="customer.tier === 'wholesale'">wholesale</span></div>
+                                        <div class="truncate text-xs text-slate-500">
+                                            <span x-text="customer.phone || customer.code"></span>
+                                            <template x-if="customer.balance && parseFloat(customer.balance) > 0"><span class="text-amber-700"> · owes <span x-text="cfg.currency + ' ' + money(customer.balance)"></span></span></template>
+                                            <template x-if="customer.advance && parseFloat(customer.advance) > 0"><span class="text-blue-700"> · holds credit <span x-text="cfg.currency + ' ' + money(customer.advance)"></span></span></template>
+                                            <template x-if="!customer.allow_credit"><span> · cash only</span></template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="flex shrink-0 gap-1.5">
+                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading @click="openCustomer()" title="F4" x-text="customer ? 'Change (F4)' : 'Choose customer (F4)'"></button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="customer" @click="useCustomer(null)" aria-label="Back to the walk-in customer" title="Back to the walk-in customer">✕</button>
+                            </div>
+                        </div>
+                    @endif
+
                     <p x-show="error" x-cloak class="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700" x-text="error"></p>
 
                     <div class="max-h-[46vh] divide-y divide-slate-100 overflow-y-auto">
@@ -167,7 +192,7 @@
                 <div class="mt-3 space-y-2">
                     <template x-for="(row, i) in pay.rows" :key="i">
                         <div class="grid grid-cols-12 items-center gap-1.5">
-                            <select x-model.number="row.method" class="input col-span-4 h-10" aria-label="Payment method"><template x-for="m in cfg.methods" :key="m.id"><option :value="m.id" x-text="m.name"></option></template></select>
+                            <select x-model.number="row.method" class="input col-span-4 h-10" aria-label="Payment method"><template x-for="m in availableMethods" :key="m.id"><option :value="m.id" x-text="m.name"></option></template></select>
                             <input type="text" inputmode="decimal" x-model="row.amount" @keydown.enter.prevent="complete()" class="input col-span-4 h-10 text-right text-lg" aria-label="Amount" :id="'pay-amount-' + i">
                             <button type="button" class="btn btn-secondary btn-sm col-span-2 h-10" data-no-loading @click="fillExact(row)">Exact</button>
                             <button type="button" class="col-span-2 h-10 text-sm text-red-600" data-no-loading x-show="pay.rows.length > 1" @click="removePayRow(i)">remove</button>
@@ -179,9 +204,32 @@
 
                 <div class="mt-4 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3 text-sm">
                     <div>Paid <div class="text-lg font-semibold" x-text="money(paid)"></div></div>
-                    <div class="text-right"><span x-show="parseFloat(change) > 0">Change to give</span><span x-show="parseFloat(change) <= 0 && parseFloat(remaining) > 0">Still to pay</span>
+                    <div class="text-right"><span x-show="parseFloat(change) > 0">Change to give</span><span x-show="parseFloat(change) <= 0 && parseFloat(remaining) > 0" x-text="customer && customer.allow_credit ? 'Left on account' : 'Still to pay'"></span>
                         <div class="text-2xl font-bold" :class="parseFloat(change) > 0 ? 'text-emerald-700' : 'text-amber-700'" x-text="parseFloat(change) > 0 ? money(change) : (parseFloat(remaining) > 0 ? money(remaining) : '0.00')"></div></div>
                 </div>
+
+                <template x-if="customer">
+                    <div class="mt-2 rounded-md border border-slate-200 p-3 text-sm" id="pos-pay-customer">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span>Customer: <strong x-text="customer.name"></strong></span>
+                            <span class="flex flex-wrap gap-1.5">
+                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="customer.allow_credit" @click="payOnAccount()">Put it all on account</button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="creditHeld > 0n" @click="useCustomerCredit()">Use their credit</button>
+                            </span>
+                        </div>
+                        <template x-if="parseFloat(onAccount) > 0">
+                            <div class="mt-1 text-amber-700">Left on account: <strong x-text="cfg.currency + ' ' + money(onAccount)"></strong>
+                                <template x-if="balanceAfter !== null"><span class="text-slate-600"> · they will then owe <strong x-text="cfg.currency + ' ' + money(balanceAfter)"></strong></span></template>
+                            </div>
+                        </template>
+                        <template x-if="overLimit">
+                            <div class="mt-1 text-red-700">This is over their credit limit of <span x-text="cfg.currency + ' ' + money(customer.credit_limit)"></span>. A manager must approve it.</div>
+                        </template>
+                        <template x-if="creditHeld > 0n">
+                            <div class="mt-1 text-blue-700">They hold <span x-text="cfg.currency + ' ' + money(customer.advance)"></span> of credit from earlier payments.</div>
+                        </template>
+                    </div>
+                </template>
 
                 <p class="mt-2 text-sm text-red-600" x-show="pay.error || payProblem" x-text="pay.error || payProblem"></p>
 
@@ -191,6 +239,62 @@
                 </div>
             </div>
         </div>
+
+        {{-- ===================================================== choose or add the customer --}}
+        @if($config['can']['customers'])
+            <div x-show="cust.open" x-cloak class="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/50 p-4 pt-20">
+                <div class="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" role="dialog" aria-modal="true" aria-label="Customer">
+                    <h3 class="text-lg font-semibold text-slate-900" x-text="cust.adding ? 'Add a customer' : 'Choose the customer'"></h3>
+
+                    <div x-show="!cust.adding">
+                        <input id="pos-customer-search" type="search" x-model="cust.query" @input="onCustomerInput()" autocomplete="off" placeholder="Name, phone, code or company"
+                               class="input mt-3" x-effect="if (cust.open && !cust.adding) $nextTick(() => $el.focus())">
+                        <p class="py-4 text-center text-sm text-slate-500" x-show="!cust.query.trim()">Type a name, phone number or customer code.</p>
+                        <p class="py-4 text-center text-sm text-slate-500" x-show="cust.query.trim() && !cust.busy && !cust.results.length">No customer found.</p>
+                        <ul class="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                            <template x-for="c in cust.results" :key="c.id">
+                                <li>
+                                    <button type="button" data-no-loading class="flex w-full items-center justify-between gap-2 px-2 py-2 text-left hover:bg-slate-50" @click="useCustomer(c)">
+                                        <span class="min-w-0">
+                                            <span class="block truncate text-sm font-medium text-slate-900" x-text="c.name"></span>
+                                            <span class="block truncate text-xs text-slate-500"><span x-text="c.phone || 'no phone'"></span> · <span x-text="c.code"></span><template x-if="c.company"><span> · <span x-text="c.company"></span></span></template></span>
+                                        </span>
+                                        <span class="shrink-0 text-right text-xs">
+                                            <template x-if="c.balance && parseFloat(c.balance) > 0"><span class="block text-amber-700">owes <span x-text="money(c.balance)"></span></span></template>
+                                            <template x-if="c.advance && parseFloat(c.advance) > 0"><span class="block text-blue-700">credit <span x-text="money(c.advance)"></span></span></template>
+                                            <template x-if="c.tier === 'wholesale'"><span class="block text-slate-500">wholesale</span></template>
+                                            <template x-if="!c.allow_credit"><span class="block text-slate-400">cash only</span></template>
+                                        </span>
+                                    </button>
+                                </li>
+                            </template>
+                        </ul>
+                        <div class="mt-4 flex flex-wrap justify-between gap-2">
+                            <span class="flex gap-2">
+                                <button type="button" class="btn btn-secondary" data-no-loading @click="useCustomer(null)">Walk-in customer</button>
+                                @if($config['can']['addCustomer'])<button type="button" class="btn btn-secondary" data-no-loading @click="startAddCustomer()">Add a new customer</button>@endif
+                            </span>
+                            <button type="button" class="btn btn-secondary" data-no-loading @click="closeCustomer()">Close (Esc)</button>
+                        </div>
+                    </div>
+
+                    @if($config['can']['addCustomer'])
+                        <form x-show="cust.adding" @submit.prevent="quickAdd()" class="mt-3 space-y-2">
+                            <input type="text" x-model="cust.form.name" maxlength="150" placeholder="Name" class="input" aria-label="Customer name" x-effect="if (cust.open && cust.adding) $nextTick(() => $el.focus())">
+                            <input type="text" x-model="cust.form.phone" maxlength="30" placeholder="Phone number" inputmode="tel" class="input" aria-label="Phone number">
+                            <input type="text" x-model="cust.form.company" maxlength="150" placeholder="Company (optional)" class="input" aria-label="Company">
+                            <label class="flex items-center gap-2 text-sm text-amber-800" x-show="cust.duplicate"><input type="checkbox" x-model="cust.allow" class="rounded border-slate-300"> This is a different person with the same number: save anyway</label>
+                            <p class="text-sm text-red-600" x-show="cust.error" x-text="cust.error"></p>
+                            <p class="text-xs text-slate-500">Credit terms and wholesale prices are set by a manager on the customer's page.</p>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="btn btn-secondary" data-no-loading @click="cust.adding = false; cust.error = ''">Back</button>
+                                <button type="submit" class="btn btn-primary" data-no-loading :disabled="cust.busy"><span x-text="cust.busy ? 'Saving…' : 'Add and select'"></span></button>
+                            </div>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        @endif
 
         {{-- ===================================================== manager approval --}}
         <div x-show="approval.open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">

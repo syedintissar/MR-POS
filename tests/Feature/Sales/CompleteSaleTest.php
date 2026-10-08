@@ -624,12 +624,16 @@ class CompleteSaleTest extends TestCase
         $this->sell([$this->line($this->item())], ['idempotency_key' => 'not-a-uuid']);
     }
 
-    public function test_named_customers_are_not_available_yet(): void
+    public function test_a_named_customer_can_buy_and_pay_in_full_and_an_unknown_one_is_refused(): void
     {
-        $other = Customer::factory()->create();
+        $named = Customer::factory()->create();
+        $sale = $this->sell([$this->line($this->item())], ['customer_id' => $named->id]);
+        $this->assertSame($named->id, $sale->customer_id);
+        $this->assertSame('paid', $sale->payment_status);
+        $this->assertBooksAgree();
 
         $this->expectException(DomainException::class);
-        $this->sell([$this->line($this->item())], ['customer_id' => $other->id]);
+        $this->sell([$this->line($this->item())], ['customer_id' => 999999]);
     }
 
     public function test_the_walk_in_customer_is_unique_and_cannot_hold_credit(): void

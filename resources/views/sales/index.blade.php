@@ -31,7 +31,7 @@
                 <tr class="{{ $s->isVoided() ? 'text-slate-400' : '' }}">
                     <td class="font-mono text-xs font-medium"><a href="{{ route('sales.show', $s) }}">{{ $s->invoice_no }}</a></td>
                     <td class="whitespace-nowrap">{{ $s->sale_date->format('d M Y, H:i') }}</td>
-                    <td>{{ $s->customer->is_walk_in ? 'Walk-in' : $s->customer->name }}</td>
+                    <td>@if($s->customer->is_walk_in)Walk-in @else @can('customers.view')<a href="{{ route('customers.show', $s->customer_id) }}" class="text-slate-900">{{ $s->customer->name }}</a>@else{{ $s->customer->name }}@endcan @endif</td>
                     <td>{{ $s->cashier?->name }}</td>
                     <td class="text-right">{{ $s->items_count }}</td>
                     <td class="text-right font-medium {{ $s->isVoided() ? 'line-through' : '' }}">{{ \App\Support\Money::format($s->grand_total) }}</td>

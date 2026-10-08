@@ -43,6 +43,23 @@ class Customer extends Model
         return $this->hasMany(CustomerPayment::class);
     }
 
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(CustomerLedgerEntry::class);
+    }
+
+    /** A customer with any history can only be deactivated, never deleted. */
+    public function hasHistory(): bool
+    {
+        return $this->sales()->exists() || $this->payments()->exists() || $this->ledgerEntries()->exists();
+    }
+
+    /** Phone number reduced to its digits, so "0300-1234567" and "0300 1234567" count as the same number. */
+    public static function normalizePhone(?string $phone): string
+    {
+        return preg_replace('/\D+/', '', (string) $phone) ?? '';
+    }
+
     /** The one walk-in customer. Created if it is missing (for example on a database restored from an old backup). */
     public static function walkIn(): self
     {

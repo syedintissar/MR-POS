@@ -33,6 +33,22 @@ class CustomerPayment extends Model
         return $this->hasMany(SalePayment::class);
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    /** The sale this receipt was taken for, when it was taken at the till (collected payments have none). */
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class);
+    }
+
     public function isVoided(): bool
     {
         return $this->status === 'voided';

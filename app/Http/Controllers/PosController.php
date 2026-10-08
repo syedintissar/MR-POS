@@ -9,10 +9,12 @@ use App\Exceptions\ApprovalRequiredException;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\TotalMismatchException;
 use App\Models\Category;
+use App\Models\Customer;
 use App\Models\HeldSale;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Services\Customers\CustomerAccountService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Sales\PosApprovalService;
 use App\Services\SettingsService;
@@ -38,6 +40,7 @@ class PosController extends Controller
         private readonly SettingsService $settings,
         private readonly CompleteSale $complete,
         private readonly PosApprovalService $approvals,
+        private readonly CustomerAccountService $customers,
     ) {}
 
     public function index(Request $request): View
@@ -46,6 +49,14 @@ class PosController extends Controller
         $user = $request->user();
         $s = $this->settings;
         $taxOn = $s->bool('tax.enabled');
+        $money = $user->can('customer_payments.view');
+
+        // a customer chosen on their profile page ("Sell to this customer")
+        $preselected = null;
+        if ($request->filled('customer') && $user->can('customers.view')) {
+            $c = Customer::query()->where('is_walk_in', false)->where('is_active', true)->find($request->integer('customer'));
+            $preselected = $c ? $this->customers->summary($c, $money) : null;
+        }
 
         return view('pos.index', [
             'categories' => Category::query()->whereNull('parent_id')->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
@@ -66,12 +77,20 @@ class PosController extends Controller
                     'discountUnlimited' => $user->can('sales.discount_unlimited'),
                     'hold' => $user->can('sales.hold'),
                     'complete' => $user->can('sales.create'),
+                    'credit' => $user->can('sales.credit'),
+                    'overrideLimit' => $user->can('sales.override_credit_limit'),
+                    'customers' => $user->can('customers.view'),
+                    'addCustomer' => $user->can('customers.create'),
+                    'seeBalance' => $money,
                 ],
+                'creditMethodId' => PaymentMethod::query()->where('kind', 'customer_credit')->value('id'),
+                'customer' => $preselected,
                 'methods' => PaymentMethod::query()->forTill()->get(['id', 'name', 'kind', 'requires_reference'])
                     ->map(fn ($m) => ['id' => $m->id, 'name' => $m->name, 'kind' => $m->kind, 'ref' => (bool) $m->requires_reference])->values(),
                 'urls' => [
                     'search' => route('pos.products.search'), 'quick' => route('pos.products.quick'), 'sale' => route('pos.sales.store'),
                     'approval' => route('pos.approvals'), 'held' => route('pos.held.index'), 'sales' => route('sales.index'),
+                    'customerSearch' => route('pos.customers.search'), 'customerStore' => route('pos.customers.store'),
                 ],
             ],
         ]);
@@ -133,6 +152,7 @@ class PosController extends Controller
 
         $d = $request->validate([
             'idempotency_key' => ['required', 'uuid'],
+            'customer_id' => ['nullable', 'integer'],
             'price_tier' => ['nullable', 'in:retail,wholesale'],
             'lines' => ['required', 'array', 'min:1', 'max:200'],
             'lines.*.product_id' => ['required', 'integer'],
@@ -174,6 +194,8 @@ class PosController extends Controller
             'invoice_no' => $sale->invoice_no,
             'total' => (string) $sale->grand_total,
             'paid' => (string) $sale->paid_amount,
+            'due' => (string) $sale->due_amount,
+            'customer' => $sale->customer->is_walk_in ? null : $sale->customer->name,
             'change' => (string) $sale->change_amount,
             'tendered' => $sale->amount_tendered !== null ? (string) $sale->amount_tendered : null,
             'replayed' => ! $sale->wasRecentlyCreated,
@@ -218,6 +240,7 @@ class PosController extends Controller
             'cart.lines' => ['required', 'array', 'min:1', 'max:200'],
             'cart.lines.*.id' => ['required', 'integer'],
             'cart.lines.*.qty' => ['required', 'numeric', 'gt:0'],
+            'cart.customer_id' => ['nullable', 'integer'],
         ]);
         $cart = $request->input('cart');   // the whole cart as the screen sent it (validate() only hands back the fields it checked)
         abort_if(strlen((string) json_encode($cart)) > 100000, 422, 'This cart is too large to hold.');
@@ -227,7 +250,7 @@ class PosController extends Controller
         }
 
         $label = trim((string) ($d['label'] ?? '')) ?: 'Cart '.now()->format('H:i');
-        $held = HeldSale::query()->create(['user_id' => $request->user()->id, 'label' => $label, 'cart' => $cart]);
+        $held = HeldSale::query()->create(['user_id' => $request->user()->id, 'customer_id' => Customer::query()->where('is_walk_in', false)->whereKey((int) ($cart['customer_id'] ?? 0))->value('id'), 'label' => $label, 'cart' => $cart]);
 
         return response()->json(['id' => $held->id, 'label' => $held->label], 201);
     }
@@ -241,7 +264,12 @@ class PosController extends Controller
         $ids = collect($held->cart['lines'] ?? [])->pluck('id')->map(fn ($id) => (int) $id)->all();
         $products = Product::query()->with('unit')->withTrashed()->whereIn('id', $ids)->get()->map(fn (Product $p) => $this->productRow($p) + ['available' => $p->is_active && ! $p->trashed()]);
 
-        return response()->json(['id' => $held->id, 'label' => $held->label, 'cart' => $held->cart, 'products' => $products->values()]);
+        $customer = $held->customer_id ? Customer::query()->where('is_walk_in', false)->find($held->customer_id) : null;
+
+        return response()->json([
+            'id' => $held->id, 'label' => $held->label, 'cart' => $held->cart, 'products' => $products->values(),
+            'customer' => $customer ? $this->customers->summary($customer, $request->user()->can('customer_payments.view')) : null,
+        ]);
     }
 
     public function discard(Request $request, HeldSale $held): JsonResponse

@@ -68,6 +68,16 @@
                 <div class="text-xs text-slate-500">{{ $payables['suppliers'] }} supplier(s) · {{ $payables['open_bills'] }} open bill(s)@if($payables['drafts']) · {{ $payables['drafts'] }} draft(s) not received yet @endif</div>
             </div>
         @endif
+        @if($receivables)
+            <div class="card card-body">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Owed by customers</div>
+                    @can('reports.customers')<a href="{{ route('receivables.index') }}" class="text-xs">Who owes us</a>@endcan
+                </div>
+                <div class="mt-1 text-2xl font-semibold {{ (float) $receivables['owed'] > 0 ? 'text-amber-600' : 'text-slate-900' }}">{{ \App\Support\Money::withSymbol($receivables['owed']) }}</div>
+                <div class="text-xs text-slate-500">{{ $receivables['customers'] }} customer(s) · {{ $receivables['open_invoices'] }} unpaid invoice(s)</div>
+            </div>
+        @endif
         @can('backups.view')
             <div class="card card-body">
                 <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Last good backup</div>
@@ -115,7 +125,7 @@
 
         <div class="card card-body xl:col-span-1">
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Coming next</div>
-            <p class="mt-1 text-sm text-slate-600">Products, stock and suppliers are ready. Purchases, the POS, customers, repair jobs and reports follow in the next phases, and their figures will appear here.</p>
+            <p class="mt-1 text-sm text-slate-600">Products, stock, suppliers, purchases, the till, sales and customers are ready. Repair and refill jobs, returns, expenses and reports follow in the next phases, and their figures will appear here.</p>
         </div>
     </div>
 </x-layouts.app>

@@ -35,7 +35,7 @@ A discount above your limit, a changed price, the wholesale list, or a price bel
 **Hold (F8)** puts the customer's items aside under a name so you can serve someone else; **Held carts** lists yours and **Resume** brings one back (the screen warns if a price changed while it was waiting). A held cart reserves no stock. **Clear** empties the cart. If the page is closed or refreshed by accident, the cart comes back.
 
 ### Keys
-F2 search · F8 hold · F9 pay · F10 complete · Esc closes a box · + and − change the quantity of the line you are in.
+F2 search · **F4 choose the customer** · F8 hold · F9 pay · F10 complete · Esc closes a box · + and − change the quantity of the line you are in.
 
 ### Sales history, reprints and cancelling
 **Selling → Sales** lists invoices (cashiers see their own; managers see everyone's) with filters for date, cashier and payment method. Open an invoice to see its lines and payments (managers also see the cost and profit). **Print receipt (copy)**, **Print A4 invoice (copy)** and **Download PDF** are marked DUPLICATE and recorded. A manager can **cancel** an invoice made by mistake (password and reason): the goods go back into stock and the payments are cancelled, nothing is deleted. Managers can do this within 24 hours; an administrator at any time; never after goods were returned.
@@ -44,7 +44,31 @@ F2 search · F8 hold · F9 pay · F10 complete · Esc closes a box · + and − 
 - Holding and resuming a sale, printing the receipt or A4 invoice, reprinting
 - Voiding a sale (managers), keyboard shortcuts
 
-## 3. Customers & collecting payments [Phase 6]
+## 3. Customers & collecting payments
+
+### Customers
+Open **Customers → Customers**. Search by name, phone, code or company. **Add customer** asks for a name (everything else is optional): phone, WhatsApp, address, notes. If the phone number already belongs to someone, the screen tells you who and asks you to tick "save anyway" (two people can share a shop number). A customer you stop dealing with is **deactivated**, not deleted: they keep their history but cannot buy. Only a customer with no invoices or payments can be deleted.
+
+A **manager** decides how a customer may buy: **Retail or Wholesale prices**, whether they may buy **on credit**, and an optional **credit limit** (leave it empty for no limit). A cashier can add a customer but not give credit.
+
+The customer's page shows what they owe, the unpaid invoices (oldest first), recent sales and payments, and the account history. **Sell to this customer** opens the till with them already chosen. Only the **Administrator** can enter an **opening balance** (money a customer already owed when you started using the system): once, with a reason and the password. A later correction is a separate "balance adjustment", always with a reason.
+
+### Selling to a customer at the till
+Press **F4** (or **Choose customer**) and type a name, phone number or code; click the customer. **Add a new customer** is in the same box. The customer's price list is used automatically. If you do not choose a customer, the sale is to the **walk-in customer**, who pays in full.
+
+- **Credit.** On the payment screen type only what the customer pays now (or press **Put it all on account**): the rest is **left on account** and shown on the receipt screen. It only works for a customer marked "allow credit". If it would take them over their credit limit the till says so and a manager must approve it, like a discount.
+- **Customer credit.** If a customer has paid more than they owed, the till shows "holds credit" and **Use their credit** pays the sale from it; nothing goes into the cash drawer.
+
+### Collecting a payment
+**Customers → Customer payments → Collect a payment** (or **Collect a payment** on a customer's page, **Collect payment** on an invoice). Choose the customer, type the amount and how they paid. By default the money settles their **oldest invoices first**; you can instead choose which invoices it pays, or keep it as an **advance**. If they pay more than they owe, the extra stays as their credit. After **Record payment** a receipt (RCP-…) opens to print.
+
+If a payment was entered by mistake, a manager opens it and presses **Cancel this payment** (reason and password): the invoices become unpaid again and the account is corrected; nothing is deleted. Then enter the correct payment.
+
+### Statements and who owes you
+On a customer's page, **Print statement** (or **PDF**) shows every sale and payment in date order with a running balance, for any date range, and can be printed or saved as a PDF to give or send to the customer. **Customers → Who owes us** lists every customer with unpaid invoices by age (today, 1–30, 31–60, 61–90 and over 90 days) so you know whom to call first; tick "list every invoice" for the detail. The dashboard shows the total owed to you.
+
+### Who can see what
+Cashiers see balances and can collect money; only managers cancel a payment. Technicians can find a customer but never see any money.
 ## 4. Repair, service & refill jobs [Phase 7]
 ## 5. Products & stock
 
@@ -156,7 +180,7 @@ Click a role to tick or untick permissions. Permissions marked *cost / profit* s
 
 ### Settings
 *Administration → Settings.*
-- **Shop**: name, address, phone, WhatsApp, email, NTN and your logo (shown on the login page and on receipts).
+- **Shop**: name, address, phone, WhatsApp, email, NTN and your logo (shown in the menu, on the sign-in page and on receipts). Until you upload one, the program shows a built-in "MR" mark drawn to look like the shop logo; **upload your own logo file here and it replaces it everywhere**.
 - **Currency**: PKR and "Rs." by default.
 - **Sales tax**: *off* because the shop is not registered. When it is, tick *Charge sales tax*, enter the rate and label (for example GST 18%). No technician is needed.
 - **Sales**: the largest discount a cashier can give without a manager, how long a sale can be voided, store credit, rounding.

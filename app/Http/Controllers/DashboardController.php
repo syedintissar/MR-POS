@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Backup;
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
@@ -62,9 +63,22 @@ class DashboardController extends Controller
             ];
         }
 
+        // What customers owe the shop (unpaid invoices and opening balances): also financial information.
+        $receivables = null;
+        if ($user->can('dashboard.financials') && $user->can('customers.view')) {
+            $row = Customer::query()->where('is_walk_in', false)->toBase()
+                ->selectRaw('COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0) AS owed, COALESCE(SUM(balance > 0), 0) AS customers')->first();
+            $receivables = [
+                'owed' => (string) $row->owed,
+                'customers' => (int) $row->customers,
+                'open_invoices' => Sale::query()->completed()->where('due_amount', '>', 0)->count(),
+            ];
+        }
+
         return view('dashboard', [
             'stockAlerts' => $stockAlerts,
             'payables' => $payables,
+            'receivables' => $receivables,
             'salesToday' => $salesToday,
             'integrity' => $integrity && ($integrity['total'] ?? 0) > 0 ? $integrity : null,
             'warnings' => $warnings,

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Actions\Sales;
 
+use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Sale;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\Customers\CustomerAccountService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Sales\SaleAccountService;
 use App\Services\SettingsService;
@@ -19,14 +21,18 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Cancels a completed sale by writing the opposite entries (nothing is deleted or edited): the goods go back into stock at the
- * cost they left at, and the payments taken for the sale are cancelled (the money is given back). Allowed only inside the void
+ * cost they left at, and the payments taken for the sale are cancelled (the money is given back). A named customer's account gets the
+ * opposite lines, and money they had paid in advance that this sale used becomes their advance again. Allowed only inside the void
  * window (an administrator may go beyond it) and only while nothing has been returned.
+ *
+ * Lock order: customer (named only) -> the sale -> its products -> audit (the same order as CompleteSale and the payment actions).
  */
 class VoidSale
 {
     public function __construct(
         private readonly InventoryService $inventory,
         private readonly SaleAccountService $accounts,
+        private readonly CustomerAccountService $customers,
         private readonly SettingsService $settings,
         private readonly AuditLogger $audit,
     ) {}
@@ -42,7 +48,16 @@ class VoidSale
             throw new DomainException('Please give a reason for cancelling the sale.');
         }
 
-        return DB::transaction(function () use ($sale, $reason, $by) {
+        $customerId = Sale::query()->whereKey($sale->getKey())->value('customer_id');
+        if ($customerId === null) {
+            throw new DomainException('This sale no longer exists.');
+        }
+
+        $walkInId = Customer::walkIn()->id;   // read before the transaction: the customer lock must be its first read (see CompleteSale::customer())
+
+        return DB::transaction(function () use ($sale, $customerId, $walkInId, $reason, $by) {
+            // the customer first (a named customer's account is also changed by payments and new sales), then the sale
+            $customer = (int) $customerId === $walkInId ? null : $this->customers->lockCustomer((int) $customerId);
             $locked = Sale::query()->whereKey($sale->getKey())->lockForUpdate()->firstOrFail();
             if ($locked->isVoided()) {
                 throw new DomainException("{$locked->invoice_no} has already been cancelled.");
@@ -74,12 +89,20 @@ class VoidSale
                 ]);
             }
 
-            // the money taken for it is given back: its receipts are cancelled
+            // the invoice comes off a named customer's account
+            if ($customer && Decimal::isPositive((string) $locked->grand_total)) {
+                $this->customers->postEntry($customer, 'sale_void', '0', (string) $locked->grand_total, $locked, "Sale {$locked->invoice_no} cancelled: {$reason}", $by);
+            }
+
+            // the money taken at the till for THIS sale is given back: its own receipts are cancelled. (A payment collected later from the
+            // customer, which settled this invoice among others, stays; the part that settled this invoice becomes their advance again.)
             $refunded = '0.00';
-            $paymentIds = $locked->allocations()->pluck('customer_payment_id')->all();
-            foreach (CustomerPayment::query()->whereIn('id', $paymentIds)->where('status', 'posted')->orderBy('id')->lockForUpdate()->get() as $payment) {
+            foreach (CustomerPayment::query()->where('sale_id', $locked->id)->where('status', 'posted')->orderBy('id')->lockForUpdate()->get() as $payment) {
                 $payment->forceFill(['status' => 'voided', 'voided_at' => now(), 'voided_by' => $by->id, 'void_reason' => mb_substr("Sale {$locked->invoice_no} cancelled: {$reason}", 0, 255)])->save();
                 $refunded = Decimal::add($refunded, (string) $payment->amount, 2);
+                if ($customer) {
+                    $this->customers->postEntry($customer, 'payment_void', (string) $payment->amount, '0', $payment, "Payment {$payment->receipt_no} cancelled with {$locked->invoice_no}", $by);
+                }
             }
 
             $locked->forceFill(['status' => Sale::VOIDED, 'voided_at' => now(), 'voided_by' => $by->id, 'void_reason' => mb_substr($reason, 0, 255)])->save();
