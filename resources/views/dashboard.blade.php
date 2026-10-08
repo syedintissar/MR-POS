@@ -48,6 +48,16 @@
                 @endif
             </div>
         @endif
+        @if($salesToday)
+            <div class="card card-body">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $salesToday['own'] ? 'Your sales today' : 'Sales today' }}</div>
+                    <a href="{{ route('sales.index', ['from' => now()->toDateString(), 'to' => now()->toDateString()]) }}" class="text-xs">See all</a>
+                </div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900">{{ \App\Support\Money::withSymbol($salesToday['total']) }}</div>
+                <div class="text-xs text-slate-500">{{ $salesToday['count'] }} sale(s)@can('pos.access') · <a href="{{ route('pos.index') }}">open the till</a>@endcan</div>
+            </div>
+        @endif
         @if($payables)
             <div class="card card-body">
                 <div class="flex items-center justify-between">

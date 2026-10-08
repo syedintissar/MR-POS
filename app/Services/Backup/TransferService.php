@@ -7,6 +7,7 @@ namespace App\Services\Backup;
 use App\Models\Backup;
 use App\Models\BackupDestination;
 use App\Models\BackupTransfer;
+use App\Support\SafeRename;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -149,7 +150,7 @@ class TransferService
             throw new RuntimeException('The copy does not match the original (checksum differs).');
         }
 
-        rename($partial, $target);
+        SafeRename::move($partial, $target);   // a drive or antivirus may hold the new file for a moment
         @file_put_contents($target.'.sha256', $backup->sha256.'  '.$backup->filename.PHP_EOL);
 
         return $target;

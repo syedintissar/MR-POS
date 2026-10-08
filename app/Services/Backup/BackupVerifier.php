@@ -6,6 +6,7 @@ namespace App\Services\Backup;
 
 use App\Models\Backup;
 use App\Services\SettingsService;
+use App\Support\SafeZip;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -83,7 +84,7 @@ class BackupVerifier
         }
 
         $zip = new ZipArchive;
-        if ($zip->open($zipPath, ZipArchive::RDONLY) !== true) {
+        if (SafeZip::open($zip, $zipPath, ZipArchive::RDONLY) !== true) {
             return $fail('archive cannot be opened (corrupted)');
         }
 
@@ -157,7 +158,7 @@ class BackupVerifier
 
         try {
             $zip = new ZipArchive;
-            $zip->open($zipPath, ZipArchive::RDONLY);
+            SafeZip::open($zip, $zipPath, ZipArchive::RDONLY);
             $password ??= $this->settings->string('backup.encryption_password') ?: null;
             if ($password) {
                 $zip->setPassword($password);

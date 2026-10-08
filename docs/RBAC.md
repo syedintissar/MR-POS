@@ -238,3 +238,26 @@ Every route below is protected twice: by route middleware (`can:`) and, for the 
 | Dashboard "Owed to suppliers" tile | `dashboard.financials` **and** `suppliers.view` | |
 
 Cashier and Technician hold none of the purchase, supplier-payment or supplier permissions, so they cannot reach any of these screens and never see purchase costs or what the shop owes.
+
+---
+
+## 8. Phase 5 route map (as enforced)
+
+Every route is protected by route middleware (`can:`) and again inside the action that does the work. "Password" means the user re-typed their password in the last 10 minutes. Tests: `Phase5RoleMatrixTest` runs every route against all four default roles; `PosWebTest` covers the rest.
+
+| Screen / action | Permission | Password |
+|---|---|:-:|
+| Open the till, product search, quick picks | `pos.access` | |
+| Complete a sale (the action re-checks), ask a manager for approval | `sales.create` | |
+| Hold, list, resume, discard own held carts | `sales.hold` (and only your own carts) | |
+| Sales list and invoice page | `sales.view_all`, or `sales.view_own` (then only your own invoices) | |
+| Reprint receipt / A4 invoice, download PDF (marked DUPLICATE, audited) | `sales.reprint` (plus the right to see that invoice) | |
+| Cancel a sale | `sales.void` (managers within the void window; an administrator any time) | ✅ |
+| Original receipt right after a sale | a signed link, valid ten minutes | |
+| Change a price, use the wholesale list | `sales.change_price`, or a manager's approval | |
+| Discounts / above the limit | `sales.discount` / `sales.discount_unlimited`, or a manager's approval | |
+| Sell below the lowest price | `sales.below_min_price` (Administrator), or an administrator's approval | |
+| Be the one who approves at the till | `sales.approve` (Manager, Administrator) | their own password |
+| See cost and profit on an invoice | `products.view_cost` | |
+
+Cashiers can sell, hold, reprint and see **their own** sales; they cannot cancel a sale, change a price, give a large discount or see cost, profit or other people's invoices. Technicians have none of these.

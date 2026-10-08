@@ -37,6 +37,12 @@ class PaymentMethod extends Model
         return $q->where('is_active', true)->where('kind', '!=', 'customer_credit')->orderBy('sort_order')->orderBy('name');
     }
 
+    /** Methods that can be chosen at the till. Customer credit joins them with named customers (Phase 6). */
+    public function scopeForTill(Builder $q): Builder
+    {
+        return $q->where('is_active', true)->where('kind', '!=', 'customer_credit')->orderBy('sort_order')->orderBy('name');
+    }
+
     public function isUsed(): bool
     {
         return $this->supplierPayments()->exists();

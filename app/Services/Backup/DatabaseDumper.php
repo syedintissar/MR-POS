@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Backup;
 
 use App\Exceptions\BackupException;
+use App\Support\SafeRename;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 
@@ -132,6 +133,6 @@ class DatabaseDumper
 
         fclose($in);
         fclose($out);
-        rename($tmp, $file);
+        SafeRename::move($tmp, $file);   // antivirus may hold the new file for a moment on Windows
     }
 }

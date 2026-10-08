@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Models\Customer;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\Artisan;
@@ -52,6 +53,7 @@ trait UsesCommittedDatabase
         }
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
+        Customer::walkIn();   // the one reference row that lives in a data table
         DB::table('document_sequences')->update(['next_number' => 1, 'current_year' => null]);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

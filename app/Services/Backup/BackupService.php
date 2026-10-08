@@ -9,6 +9,7 @@ use App\Models\Backup;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\SettingsService;
+use App\Support\SafeZip;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -289,7 +290,7 @@ class BackupService
     private function buildZip(string $zipPath, string $tmp, array $manifest, ?string $password): void
     {
         $zip = new ZipArchive;
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        if (SafeZip::open($zip, $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new BackupException('Could not create the backup archive.');
         }
 

@@ -903,3 +903,57 @@ Tables added in Phase 4 (migrations `2026_10_07_3000xx_*`): `payment_methods`, `
 6. For every received purchase the quantity added to stock by its `purchase` movements equals the quantity on its lines.
 
 As before, nothing is "fixed" automatically: a mismatch is audited, shown on the dashboard and makes the command exit with code 1.
+
+---
+
+## 11. Phase 5 implementation notes (POS, sales & invoices)
+
+Tables added in Phase 5 (migrations `2026_10_07_4000xx_*`): `customers`, `sales`, `sale_items`, `customer_payments`, `sale_payments`, `held_sales`.
+
+| Item | As built | Why |
+|---|---|---|
+| `customers` | Created now with its full shape (§2.4), because every sale points at a customer. The migration inserts the **one walk-in customer** (`WALK-IN`). A generated column + `UNIQUE` index makes a second walk-in impossible, and `CHECK (is_walk_in = 0 OR (allow_credit = 0 AND balance = 0 AND opening_balance = 0))` enforces BR-11 in the database. There are no customer screens, ledger or credit yet: Phase 6 adds code, not schema | Walk-in sales need a customer row; the rule that the walk-in customer can never owe anything is too important to leave to application code |
+| `sales` | As §2.6, plus `tax_inclusive` (snapshot of whether the entered prices contained tax) and constraints: status, payment status, tier, non-negative amounts, and "voided exactly when `voided_at` is set". `invoice_no` and `idempotency_key` are unique | The snapshot keeps an old invoice readable when the tax setting changes later |
+| `sale_items` | As §2.6; names, SKU, list price, charged price, the line's share of the invoice discount, tax, net, total, **unit cost at the moment of sale**, serial number, warranty date, `returned_quantity <= quantity` (all `CHECK`ed) | An invoice never changes when a product is renamed or re-priced; profit uses the cost snapshot (BR-07) |
+| Payments | Every payment taken at the till is one `customer_payments` row (`receipt`, numbered `RCP-`) allocated by one `sale_payments` row to exactly one sale. **Change is not a payment**: only what the sale needed is recorded; `sales.amount_tendered` and `change_amount` keep the handover for the receipt | Phase 6 customer payments, voids and statements then work on the same two tables |
+| `held_sales` | `user_id`, optional `customer_id`, `label`, the cart as JSON. Not a document: no number, no stock reserved, deleted when resumed or discarded; a cashier sees only their own (at most 30) | POS-15 |
+
+### Posting rules as implemented
+| Operation | Stock | Payments | Customer ledger | Other |
+|---|---|---|---|---|
+| Complete sale (`CompleteSale`) | `sale` −qty per stock line at the **current average cost** (snapshotted on the line); services have no movement | one receipt + allocation per payment line | none: the walk-in customer pays in full and holds no balance | invoice number from the `sale` sequence, receipt numbers from `customer_payment`; audited; everything in ONE transaction |
+| Cancel a sale (`VoidSale`) | `sale_void` +qty at the cost the goods left at (the original `unit_cost`) | the sale's receipts are cancelled (money given back); paid / due on the invoice become 0 | none | refused after the void window (an administrator may go beyond it), when goods were returned, or twice |
+| Hold / resume / discard a cart | none | none | none | no document, not audited |
+
+**Retries and double clicks.** Every checkout carries a key (a UUID made by the browser). The same key never makes a second sale: a named database lock serialises arrivals, and the `UNIQUE` index on `sales.idempotency_key` is a second, independent guard (the sale row is inserted before any stock is touched, so a duplicate is detected before it can be told "not enough stock"). A key belongs to the cashier who used it.
+
+**Lock order** (every operation, so two tills can never wait on each other in a circle): the checkout-key lock → products (by id) → number sequences (invoice, then receipts) → the audit trail. A void takes the sale first, then its products.
+
+**Everything is recalculated on the server.** The screen sends only products, quantities, optional typed prices and discounts, payment lines, and the total it displayed. The server prices every line from the product (retail, or the wholesale list when chosen), applies the discounts and tax with `SaleCalculator`, and **refuses the sale if its total differs from the screen's** (a price or setting changed meanwhile). The browser's own arithmetic (`resources/js/pos-calc.js`, exact integers) is proven identical to the PHP calculator on thousands of random sales.
+
+### Money rules (SaleCalculator)
+| Step | Rule |
+|---|---|
+| Line | `gross = qty × price` rounded to the paisa; line discount as an amount or a percentage of the gross (a percentage wins when both are typed); never more than the gross |
+| Invoice discount | an amount, or a percentage of the lines after their own discounts; shared over the lines in proportion to their value by the **largest remainder method**, so the shares add up to the discount to the paisa and no line gets more than it is worth |
+| Tax | exclusive: `tax = net × rate`; inclusive: `net = paid ÷ (1 + rate)`, `tax = paid − net`. Rate = the product's own rate, else the default; zero when tax is switched off (the default) |
+| Round-off | optional, to the nearest Rs. 1 / 5 / 10 after tax, half up; the difference is stored as `round_off` |
+
+### What needs a manager (approval at the till)
+| Situation | Needs | Approver must hold |
+|---|---|---|
+| a typed price differs from the price list; the wholesale list used by someone without `sales.change_price` | approval | `sales.change_price` |
+| any discount by someone without `sales.discount`; a discount above `sales.max_discount_percent` (default 5 %) by someone without `sales.discount_unlimited` | approval | `sales.discount_unlimited` |
+| a line sold below the product's lowest allowed price (after all discounts) | approval | `sales.below_min_price` (Administrator only by default) |
+
+A manager types their own username and password on the cashier's screen. The answer is a token tied to that cashier, valid for two minutes, used once, and only after the sale is safely saved; five wrong attempts lock the dialog for five minutes; every attempt is audited and passwords are never stored or logged. The approver must hold the permission for **every** reason, so a manager cannot approve a below-minimum price.
+
+### Printing
+- The original receipt / invoice opens through a **signed link that works for ten minutes** (the POS opens it right after the sale). Any later print is a **reprint** (`sales.reprint`): marked `DUPLICATE`, audited, and a cashier may reprint only their own invoices. A cancelled invoice prints `VOID`. The A4 invoice can also be downloaded as a **PDF** (built on the server with dompdf, nothing fetched from the internet, always marked DUPLICATE, audited).
+- Thermal layout follows Settings → Printing (paper width 58/72/80 mm, margins, font size, copies, auto-print) and carries the invoice number as a Code 128 barcode.
+
+### Integrity checks added (`pos:integrity:check`, twice a day)
+7. Every invoice: lines add up to the header (items, discounts, tax, round-off, grand total).
+8. Every invoice: `paid_amount`, `due_amount` and `payment_status` equal what its posted receipts imply (a cancelled invoice shows 0 and 0).
+9. A posted receipt is never allocated for more than its amount.
+10. Units on each invoice (stock items) equal what the stock ledger took out; a cancelled invoice's goods all went back; the walk-in customer's balance is 0.

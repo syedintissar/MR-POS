@@ -10,6 +10,7 @@ use App\Models\BackupRestore;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\SettingsService;
+use App\Support\SafeZip;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -175,7 +176,7 @@ class RestoreService
     private function extract(string $zipPath, string $dest, ?string $password): void
     {
         $zip = new ZipArchive;
-        if ($zip->open($zipPath, ZipArchive::RDONLY) !== true) {
+        if (SafeZip::open($zip, $zipPath, ZipArchive::RDONLY) !== true) {
             throw new BackupException('The backup archive cannot be opened.');
         }
 

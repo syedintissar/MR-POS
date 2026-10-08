@@ -36,7 +36,11 @@
         ['label' => 'Supplier payments', 'route' => 'supplier-payments.index', 'match' => 'supplier-payments.*', 'can' => 'supplier_payments.view', 'icon' => 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'],
         ['label' => 'Suppliers', 'route' => 'suppliers.index', 'match' => 'suppliers.*', 'can' => 'suppliers.view', 'icon' => 'M8 17a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h1m-1 0H9m4-10h3.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V16h-1'],
     ];
-    $groups = ['' => $nav, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];
+    $selling = [
+        ['label' => 'Point of sale', 'route' => 'pos.index', 'match' => 'pos.*', 'can' => 'pos.access', 'icon' => 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'],
+        ['label' => 'Sales', 'route' => 'sales.index', 'match' => 'sales.*', 'can' => 'sales.view_all|sales.view_own', 'icon' => 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z'],
+    ];
+    $groups = ['' => $nav, 'Selling' => $selling, 'Catalogue' => $catalogue, 'Inventory' => $inventoryNav, 'Purchasing' => $purchasing, 'Administration' => $admin];
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -64,10 +68,10 @@
 
         <nav class="space-y-0.5">
             @foreach($groups as $heading => $items)
-                @if(collect($items)->contains(fn ($i) => $user->can($i['can'])))
+                @if(collect($items)->contains(fn ($i) => $user->canAny(explode('|', $i['can']))))
                     @if($heading !== '')<div class="nav-heading">{{ $heading }}</div>@endif
                     @foreach($items as $item)
-                        @can($item['can'])
+                        @if($user->canAny(explode('|', $item['can'])))
                             <a href="{{ route($item['route']) }}" class="nav-link {{ request()->routeIs($item['match']) ? 'active' : '' }}">
                                 <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/></svg>
                                 <span class="flex-1">{{ $item['label'] }}</span>
@@ -75,7 +79,7 @@
                                     <span class="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-red-500/30" title="Backup problem: open Backups"></span>
                                 @endif
                             </a>
-                        @endcan
+                        @endif
                     @endforeach
                 @endif
             @endforeach

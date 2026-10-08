@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\Backup;
 use App\Models\Product;
 use App\Models\Purchase;
+use App\Models\Sale;
 use App\Models\Supplier;
 use App\Services\Backup\BackupHealth;
 use App\Services\SettingsService;
@@ -40,6 +41,15 @@ class DashboardController extends Controller
         }
         $integrity = $user->can('inventory.adjust') ? Cache::get('integrity.last') : null;
 
+        // Today's sales: everybody who may see sales sees the figure for the sales they may see (cashiers: their own).
+        $salesToday = null;
+        if ($user->can('sales.view_all') || $user->can('sales.view_own')) {
+            $row = Sale::query()->completed()->whereDate('sale_date', now()->toDateString())
+                ->when(! $user->can('sales.view_all'), fn ($q) => $q->where('user_id', $user->id))
+                ->toBase()->selectRaw('COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS total')->first();
+            $salesToday = ['count' => (int) $row->n, 'total' => (string) $row->total, 'own' => ! $user->can('sales.view_all')];
+        }
+
         // What the shop owes its suppliers: financial information, so it needs the financial permission as well.
         $payables = null;
         if ($user->can('dashboard.financials') && $user->can('suppliers.view')) {
@@ -55,6 +65,7 @@ class DashboardController extends Controller
         return view('dashboard', [
             'stockAlerts' => $stockAlerts,
             'payables' => $payables,
+            'salesToday' => $salesToday,
             'integrity' => $integrity && ($integrity['total'] ?? 0) > 0 ? $integrity : null,
             'warnings' => $warnings,
             'lastBackup' => $lastBackup,

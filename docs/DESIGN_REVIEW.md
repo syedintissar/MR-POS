@@ -168,3 +168,34 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P4-08 | Purchase screens necessarily show costs | They (and the supplier account) belong to Manager and Admin only. Tests prove a cashier and a technician see no cost or supplier information on the dashboard, product pages, the product search JSON, the stock card or any purchasing URL |
 | P4-09 | The test helper that empties the data tables also emptied the payment methods | `payment_methods` joined the list of reference tables that are kept (roles, permissions, units, categories, brands, numbering) |
 | P4-10 | Two tests of mine used `array + array` (which keeps the left-hand value) and silently did not test what they claimed | Replaced with `array_merge`; noted so it is not repeated |
+
+---
+
+## 8. Phase 5 decisions and findings
+
+### Defaults used for the questions put at the end of Phase 4 (the owner can change any of them)
+| # | Question | Default used |
+|---|---|---|
+| P5-D1 | Credit and partial payments | Customers arrive in Phase 6, so Phase 5 sells to the **walk-in customer only, paid in full** (cash, card, bank, wallet, split across methods). Named customers, credit, partial payment and customer credit are refused with a clear message until then |
+| P5-D2 | Cashier discount limit | 5 % of the sale without approval (`sales.max_discount_percent`); any discount above it, or any discount at all for someone without the discount permission, needs a manager |
+| P5-D3 | Rounding at the till | None by default (`sales.round_to`); Rs. 1 / 5 / 10 can be chosen in Settings |
+| P5-D4 | Wholesale price | The cashier picks Retail or Wholesale for the whole sale; a cashier needs a manager's approval for Wholesale, managers do not. A product without a wholesale price sells at its normal price |
+| P5-D5 | Void window | Managers: 24 hours (`sales.void_window_hours`); administrators: any time; always with a reason and the password; never after goods were returned |
+| P5-D6 | A4 "PDF" | A server-built PDF (dompdf, installed with Composer, works offline). It is a copy of an invoice already issued, so it is marked DUPLICATE and audited |
+| P5-D7 | Quick-pick grid | The shop's fast movers of the last 30 days; until there are enough sales, the most recently touched products. (A manual "favourites" flag can be added later if wanted) |
+| P5-D8 | Customer search (F4) | Phase 6, with the customer module |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P5-01 | **A test caught a real bug:** saving a held cart through form validation kept only the fields that were validated (product and quantity) and silently dropped prices, discounts, price list and notes, so a resumed cart would have lost them | The whole cart is saved; a test holds, changes a price, resumes and compares |
+| P5-02 | `crypto.randomUUID()` does not exist on plain `http://` pages that are not `localhost`, and the tills open the site over `http://192.168.x.x`. The checkout key would have failed to be created on every till | The key is made from `crypto.getRandomValues` (available everywhere) with a last-resort fallback; tested with and without it |
+| P5-03 | The screen must never show a total that the server then refuses, but floating-point arithmetic can differ by a paisa | The browser maths uses exact integers (BigInt) and is compared with the PHP calculator on ~4,000 random sales (tax inclusive and exclusive, discounts, round-off) inside the normal test run; the server also refuses a sale whose total differs from the screen's and tells the cashier the new figure |
+| P5-04 | **Real-browser drill.** Unit tests cannot show that the till works on a screen | A script drives the real till in headless Edge (real key presses and mouse clicks) against the real server and database: barcode scan with Enter, quantity change, stock warning, F9 / F10, change calculation, receipts, manager approval with a wrong and a right password, hold and resume, page refresh restoring the cart, a triple click on Complete, manager's invoice page. 31 checks, five runs in a row clean. Two earlier "failures" were the script typing faster than a person can (before a dialog appeared); fixed in the script, not the till |
+| P5-05 | Two independent guards stop a double sale (the named lock and the unique index) | A mutation check removed the lock: the test still passed, because the unique index alone catches it; removing **both** made the test fail with a raw duplicate-key error, so the test is sensitive. Removing the stock row locks made four sales succeed for one unit |
+| P5-06 | "The last line takes the remainder" (the first design) can give a small line more discount than it is worth | The invoice discount is shared with the largest-remainder method: exact to the paisa and never more than a line is worth. Tested with random sales |
+| P5-07 | Anyone with access could print the "original" receipt again and again, which defeats the DUPLICATE mark | The original opens only through a signed link valid for ten minutes; everything later is a reprint (marked, audited, own invoices only for cashiers) |
+| P5-08 | dompdf does not draw inline SVG, so the invoice barcode was missing from the PDF at first | The barcode is handed to it as an image; checked by rendering the PDF to a picture |
+| P5-09 | A throw-away command I ran to look at how settings are serialised used a test factory against the real database and created a stray user | Noticed at once and removed (users 0, audit 0 again); the lesson is now in my notes: never run factories against the real database |
+| P5-10 | Passing the till's settings to the page as JSON inside an HTML attribute escapes the quotes twice | The test decodes both layers; documented so the next page that does it is not surprised |
+| P5-11 | **Windows holds a file for a moment after it is written** (antivirus, the search indexer). In the full test run `rename()` was once refused with "Access is denied" on the freshly written database dump, and once `ZipArchive::open()` refused a freshly written backup. The same could happen in the nightly backup on the shop PC and turn a good backup into a reported failure | `App\Support\SafeRename` and `SafeZip` retry for a few seconds (then fall back to copy-and-delete for a rename) in every place the backup, verify, restore and transfer code renames or opens a file it has just written. Tests reproduced the real Windows refusal on this PC (a file held open) and the recovery, and a missing file still fails at once |

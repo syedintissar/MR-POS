@@ -1,7 +1,10 @@
 import './bootstrap';
 import Alpine from 'alpinejs';
 
+import { posApp } from './pos.js';
+
 window.Alpine = Alpine;
+window.posApp = posApp;
 
 /**
  * Shared UI state: toast notifications and the confirmation dialog.

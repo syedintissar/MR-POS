@@ -13,9 +13,11 @@ use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LabelController;
+use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierPaymentController;
@@ -100,6 +102,29 @@ Route::middleware('auth')->group(function () {
         Route::get('suppliers/{supplier}/statement', [SupplierController::class, 'statement'])->whereNumber('supplier')->name('suppliers.statement');
     });
     Route::post('suppliers/{supplier}/adjust-balance', [SupplierController::class, 'adjustBalance'])->whereNumber('supplier')->middleware(['can:suppliers.adjust_balance', 'password.confirm'])->name('suppliers.adjust-balance');
+
+    // ---- Phase 5: the till, sales and invoices ---------------------------------------------------------------
+
+    Route::prefix('pos')->middleware('can:pos.access')->group(function () {
+        Route::get('/', [PosController::class, 'index'])->name('pos.index');
+        Route::get('products/search', [PosController::class, 'search'])->name('pos.products.search');
+        Route::get('products/quick', [PosController::class, 'quick'])->name('pos.products.quick');
+        Route::post('sales', [PosController::class, 'store'])->middleware('can:sales.create')->name('pos.sales.store');
+        Route::post('approvals', [PosController::class, 'approve'])->middleware('can:sales.create')->name('pos.approvals');
+        Route::get('held', [PosController::class, 'held'])->middleware('can:sales.hold')->name('pos.held.index');
+        Route::post('held', [PosController::class, 'hold'])->middleware('can:sales.hold')->name('pos.held.store');
+        Route::get('held/{held}', [PosController::class, 'resume'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.show');
+        Route::delete('held/{held}', [PosController::class, 'discard'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.destroy');
+    });
+
+    Route::prefix('sales')->group(function () {
+        Route::get('/', [SaleController::class, 'index'])->name('sales.index');
+        Route::get('{sale}', [SaleController::class, 'show'])->whereNumber('sale')->name('sales.show');
+        Route::get('{sale}/print/{format}', [SaleController::class, 'print'])->whereNumber('sale')->middleware('signed')->name('sales.print');
+        Route::get('{sale}/reprint/{format}', [SaleController::class, 'reprint'])->whereNumber('sale')->name('sales.reprint');
+        Route::get('{sale}/pdf', [SaleController::class, 'pdf'])->whereNumber('sale')->name('sales.pdf');
+        Route::post('{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.void', 'password.confirm'])->name('sales.void');
+    });
 
     // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------
 

@@ -347,7 +347,7 @@ Full specification: [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Summary of the Must 
 
 ---
 
-## 6. Implementation status (end of Phase 4)
+## 6. Implementation status (end of Phase 5)
 
 | Requirement group | Status |
 |---|---|
@@ -355,6 +355,11 @@ Full specification: [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Summary of the Must 
 | **PRD-01…09** products (fields, service items, seeded categories, brands and units, price-change permission and audit, no deletion with history, CSV/XLSX import with opening stock, barcode labels, private re-encoded images) | **Built in Phase 3** |
 | **INV-01…08** stock ledger (append-only), the eleven movement types, adjustments with reasons and void, product stock card, low / out-of-stock lists, weighted-average costing, twice-daily integrity check | **Built in Phase 3** (INV-04 "stock count helper" is covered by the adjustment form; a dedicated count sheet is a later nicety) |
 | **PUR-01…09** supplier master data and account, purchase draft → received → cancelled, landed cost, supplier invoice uniqueness, payment at receiving and later payments with allocation (oldest first / chosen bills / advance), cancel with full reversal, supplier profile and printable statement, last cost shown while entering | **Built in Phase 4**. Notes: PUR-05 "one or more methods" at the moment of receiving is one method (more methods go through Supplier payments straight afterwards); PUR-08 "returns" in the profile arrive with purchase returns (Phase 8) |
-| Payment methods (configurable list used by supplier payments now and by POS later) | Built in Phase 4 |
+| Payment methods (configurable list used by supplier payments and by the till) | Built in Phase 4, used by sales in Phase 5 |
+| **POS-01…09, 11, 12, 14…24** single-screen till with search, barcode scanner, categories and quick picks, cart with quantities, price and discount per line, invoice discount, tax (off by default, configurable), round-off, split payments with change, notes, hold / resume, cancel, shortcuts (F2, F8, F9, F10, Esc, + / −), services on the till, serial numbers and warranty dates, atomic completion, receipt and A4 printing, reprint (DUPLICATE), void within the window, no overselling by several cashiers | **Built in Phase 5** |
+| **POS-06 / POS-07** price and discount permissions with manager approval at the till | **Built in Phase 5** (a manager types their own login on the cashier's screen; one use, two minutes) |
+| **DOC-01…03** invoice content, 80 mm and A4 layouts, DUPLICATE and VOID marks, A4 as PDF | **Built in Phase 5** (DOC-04 other printables: payment receipt, return receipt and service slips come with their modules) |
+| POS-10 customer selection, POS-13 credit and partial payment, POS-04 "favourites" flag | Phase 6 (customers, credit); POS-04 is served by the automatic fast-mover quick picks. POS-25 cash-drawer kick is the printer driver's "open drawer" option; the setting only reminds |
+| BR-07, BR-09, BR-11, BR-12 (profit against the cost at the moment of sale, gap-free numbers, walk-in cannot owe, audit of every sale / void / reprint / approval) | Enforced and tested |
 | BR-02, BR-05, BR-06, BR-08 (stock ledger single writer, negative-stock policy, exact decimals, cost visibility) | Enforced and tested |
 | Everything else (POS, customers, service jobs, expenses, returns, reports) | Later phases per ROADMAP.md |

@@ -109,3 +109,17 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | Restore drill | Done on the real `mrpos` database through the restore service: data entered after the backup disappeared, everything before it came back, the append-only protections (supplier ledger, stock ledger, audit log) still rejected edits, integrity check and audit chain passed. The interactive password prompt of `pos:backup:restore` cannot be scripted on Windows (it reads the real console), so the drill called the same service the command calls once the administrator is authenticated; the prompt path itself is covered by the Phase 2 tests |
 | Throwaway accounts | Users `drill` and `drillcash` existed only in the drill and were removed with the reset |
 | Not done | Windows service, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |
+
+---
+
+## 2026-10-07: Phase 5 additions
+
+| Change | Detail |
+|---|---|
+| Project packages | `dompdf/dompdf` 3.1 added with Composer (A4 invoice as a PDF; works offline, nothing is fetched from the internet when a PDF is made). No change outside `D:\MR-POS` |
+| Real database `mrpos` | **Backed up first** (`mrpos_2026-10-07_162405_manual.zip`), then migrated with the two Phase 5 migrations (`customers`, `sales tables`). After the drills it was reset to a clean install (0 users, 0 products, 0 sales, 7 payment methods, the one walk-in customer). The drill backups were **moved, not deleted**, to `D:\_env_backups\mrpos-phase5-smoke` |
+| Front-end assets | `npm run build` was run (the till is a new script); `public/build` is git-ignored: **run it again after copying a new release** |
+| Tools used for the browser drill | The existing Microsoft Edge (headless, remote-debugging port 9333 on 127.0.0.1 only, throw-away profile in the Windows temp folder, deleted by Windows cleanup) and Node.js 24 (already installed). A temporary PHP server on port 8099 served the drill and was **stopped**; a second one on port 8123 (to view a PDF) was stopped too. `pdfjs-dist` was installed **only in the session's scratch folder** (outside the project) to look at the PDF. The other PHP servers on this PC (port 8000) and the other MariaDB / MySQL servers were not touched |
+| A mistake, and its repair | While checking how a setting is stored I ran a one-line command that used a test factory against the **real** database and created one stray user. It was noticed immediately and removed (users 0, audit entries 0, audit chain verified). No data was affected |
+| Throwaway accounts | Users `drill`, `drillboss`, `drillcash` and a few products existed only in the drills and were removed with the reset |
+| Not done | Windows service, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |

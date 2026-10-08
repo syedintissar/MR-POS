@@ -18,7 +18,27 @@
 
 **Sensitive actions ask for your password again.** Downloading a backup, changing roles and resetting someone's password all ask you to type your own password once more. After you do, you are not asked again for 10 minutes.
 
-## 2. Selling at the counter (POS) [Phase 5]
+## 2. Selling at the counter (POS)
+
+Open **Selling → Point of sale**. The search box already has the cursor.
+
+### Making a sale
+1. **Add products.** Scan the barcode (the scanner presses Enter for you), or type a name, SKU or model and press **Enter** when you see the right one, or click it. The same product again raises its quantity by one. The grid below the search box shows your fast-moving products, and the coloured buttons filter by category. Services (such as a toner refill) can be sold like any product and do not use stock.
+2. **Check the cart.** Change a quantity with − / + (or the keys + and −), type a different price or a discount (rupees or %) on a line if you are allowed, type an invoice discount, and add a serial number where the product has a warranty. A red line means there is not enough stock. The big **Total** is what the customer pays.
+3. **Pay.** Press **Pay (F9)**. Cash is filled in with the exact total: type the amount the customer hands over and the screen shows the **change to give**. To split a payment, **+ Add another payment method** (for example part cash, part card); bank, wallet and cheque payments ask for a reference number. Only cash can be handed over in excess. The walk-in customer must pay in full.
+4. **Complete (F10).** The sale is saved in one step: the stock is taken out, the payments are recorded and the invoice gets its number (INV-000001 …). The receipt prints by itself (Settings → Printing), the screen shows the change to give, and the till is ready for **Next customer**. If the screen shows an error, nothing was charged: fix it and press Complete again. Pressing Complete twice, or the connection dropping, never makes two sales.
+
+### When a manager must approve
+A discount above your limit, a changed price, the wholesale list, or a price below the lowest allowed asks for a manager. The manager **types their own username and password** into the box that appears on your screen, and the same sale goes through (the approval works once, for two minutes). A manager cannot approve a price below the lowest allowed: that is for the administrator.
+
+### Hold, resume, clear
+**Hold (F8)** puts the customer's items aside under a name so you can serve someone else; **Held carts** lists yours and **Resume** brings one back (the screen warns if a price changed while it was waiting). A held cart reserves no stock. **Clear** empties the cart. If the page is closed or refreshed by accident, the cart comes back.
+
+### Keys
+F2 search · F8 hold · F9 pay · F10 complete · Esc closes a box · + and − change the quantity of the line you are in.
+
+### Sales history, reprints and cancelling
+**Selling → Sales** lists invoices (cashiers see their own; managers see everyone's) with filters for date, cashier and payment method. Open an invoice to see its lines and payments (managers also see the cost and profit). **Print receipt (copy)**, **Print A4 invoice (copy)** and **Download PDF** are marked DUPLICATE and recorded. A manager can **cancel** an invoice made by mistake (password and reason): the goods go back into stock and the payments are cancelled, nothing is deleted. Managers can do this within 24 hours; an administrator at any time; never after goods were returned.
 - Scanning or searching products, quantities, discounts and manager approval
 - Choosing a customer, taking payment (cash, card, bank, Easypaisa/JazzCash, split), credit and partial payment
 - Holding and resuming a sale, printing the receipt or A4 invoice, reprinting

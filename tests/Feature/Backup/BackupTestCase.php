@@ -5,6 +5,7 @@ namespace Tests\Feature\Backup;
 use App\Models\Backup;
 use App\Models\User;
 use App\Services\Backup\BackupService;
+use App\Support\SafeZip;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Tests\Concerns\UsesCommittedDatabase;
@@ -79,7 +80,7 @@ abstract class BackupTestCase extends TestCase
         @unlink($zipPath.'.sha256');
 
         $zip = new ZipArchive;
-        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $this->assertTrue(SafeZip::open($zip, $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE), 'The archive could not be re-opened for the test.');
         foreach ($entries as $name => $content) {
             $zip->addFromString($name, $content);
         }
