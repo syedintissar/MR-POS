@@ -187,6 +187,26 @@
             </div>
         @endif
 
+        @if(isset($recentReturns) && $recentReturns->isNotEmpty())
+            <div class="card overflow-x-auto">
+                <div class="card-header"><h2 class="card-title">Goods brought back</h2><a href="{{ route('sale-returns.index', ['q' => $customer->name, 'status' => 'all']) }}" class="text-xs">See all</a></div>
+                <table class="table">
+                    <thead><tr><th>Return</th><th>Date</th><th>Invoice</th><th>Reason</th><th class="text-right">Value</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach($recentReturns as $r)
+                        <tr class="{{ $r->isVoided() ? 'text-slate-400' : '' }}">
+                            <td class="font-mono text-xs font-medium"><a href="{{ route('sale-returns.show', $r) }}">{{ $r->return_no }}</a></td>
+                            <td class="whitespace-nowrap">{{ $r->return_date->format('d M Y') }}</td>
+                            <td class="font-mono text-xs">{{ $r->sale->invoice_no }}</td>
+                            <td class="max-w-xs truncate">{{ $r->reason }}</td>
+                            <td class="text-right {{ $r->isVoided() ? 'line-through' : '' }}">{{ Money::format($r->total) }}</td>
+                            <td class="text-right">@if($r->isVoided())<span class="badge badge-red">Cancelled</span>@endif</td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
         <div class="flex flex-wrap items-center justify-between gap-2">
             <a href="{{ route('customers.index') }}" class="text-sm">← All customers</a>
             <div class="flex gap-2">

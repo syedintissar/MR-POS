@@ -28,6 +28,9 @@
                 @if($purchase->isDraft())
                     @can('purchases.create')<a href="{{ route('purchases.edit', $purchase) }}" class="btn btn-secondary btn-sm">Edit draft</a>@endcan
                 @endif
+                @if($purchase->isReceived())
+                    @can('purchase_returns.create')<a href="{{ route('purchase-returns.create', ['purchase' => $purchase->id]) }}" class="btn btn-secondary btn-sm">Send goods back</a>@endcan
+                @endif
                 @if($purchase->isReceived() && (float) $purchase->due_amount > 0)
                     @can('supplier_payments.create')<a href="{{ route('supplier-payments.create', ['supplier' => $purchase->supplier_id, 'purchase' => $purchase->id]) }}" class="btn btn-primary btn-sm">Pay supplier</a>@endcan
                 @endif
@@ -102,6 +105,28 @@
                 @endif
             </div>
         </div>
+
+        @if($purchase->returns->isNotEmpty())
+            @can('purchase_returns.view')
+                <div class="card">
+                    <div class="card-header"><h2 class="card-title">Goods sent back against this bill</h2><span class="text-sm text-slate-500">{{ Money::format($purchase->returned_amount) }} credited in total</span></div>
+                    <table class="table">
+                        <thead><tr><th>Return</th><th>Date</th><th>Reason</th><th class="text-right">Credit</th><th></th></tr></thead>
+                        <tbody>
+                        @foreach($purchase->returns as $r)
+                            <tr class="{{ $r->isVoided() ? 'text-slate-400' : '' }}">
+                                <td class="font-mono text-xs font-medium"><a href="{{ route('purchase-returns.show', $r) }}">{{ $r->return_no }}</a></td>
+                                <td class="whitespace-nowrap">{{ $r->return_date->format('d M Y, H:i') }}</td>
+                                <td>{{ $r->reason }}</td>
+                                <td class="text-right {{ $r->isVoided() ? 'line-through' : '' }}">{{ Money::format($r->total) }}</td>
+                                <td class="text-right">@if($r->isVoided())<span class="badge badge-red">Cancelled</span>@endif</td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endcan
+        @endif
 
         @if($purchase->isDraft())
             @can('purchases.receive')

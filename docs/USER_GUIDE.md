@@ -174,11 +174,38 @@ Open a supplier to see the **balance** (amber = you owe them, blue = they hold a
 ### Payment methods
 **Settings → Payment methods** lists Cash, Bank Transfer, Card, Easypaisa, JazzCash, Cheque and Customer Credit. The administrator can add methods (for example a particular bank), rename them, tick whether a reference number is required, change their order and switch them off. Cash and Customer Credit are needed by the system; a method that has been used can be switched off but not deleted.
 
-### Returning goods to a supplier [Phase 8]
-## 7. Returns [Phase 8]
-## 8. Expenses [Phase 8]
-## 9. Reports & dashboard [Phase 8]
+### Returning goods to a supplier
+Open **Purchase returns → Send goods back** (or press **Send goods back** on a received purchase).
+1. Type the **purchase number** (PUR-000123) and press *Find purchase*, or choose a supplier for goods **without a bill**.
+2. Type how many of each product go back. The page shows what was received, what was already sent back and what is in stock now, and works out the **credit** (what the supplier billed for those units, after the line's discount).
+3. Say how the supplier settles it. The credit first **reduces what you still owe on that bill**. What is left over (the bill was already paid) either **stays as credit on the supplier's account** or the **supplier pays the money back** (choose how it was received).
+4. Write the reason and press *Record the return*. You get a return number (PRN-000123) and a **return note** to hand to the supplier.
+The goods leave your stock at what they cost to land. For goods without a bill you type the credit per unit. If you recorded a return by mistake, a manager can **cancel** it (reason and password): the goods come back into stock and the supplier's account and the bill are put back as they were. A purchase that has a return cannot be cancelled until the return is.
 
+## 7. Returns
+### Taking goods back from a customer
+Open **Sales returns → Take goods back** (or **Return items** on an invoice; only managers can make a return, cashiers can look at them).
+1. Type the **invoice number** from the customer's receipt and press *Find invoice*.
+2. For each item type how many come back (never more than were sold, less what was already returned). Choose the **condition** (resellable, damaged, defective) and whether it goes **back in stock**: resellable items do, damaged ones do not and are written off at their cost. A warranty or serial number is shown when the item has one.
+3. The page works out the value: **what the customer actually paid for those items**, after any discount, so nobody gets back more than they paid. Then it shows how it is settled: first **what they still owe on that invoice** is reduced; what is left is **money back** (choose cash, bank or wallet) or **store credit** (named customers; the walk-in customer always gets money back).
+4. Write the reason and press *Record the return*. The return receipt (SRN-000123) prints; a copy can be printed later and is marked DUPLICATE.
+**Store credit** is the customer's credit: at the till they pay with *Customer credit* (that is also how an exchange works: store credit now, the new sale next). A return made by mistake can be **cancelled** by a manager (reason and password) as long as the goods were not sold again and the store credit was not spent; an invoice that has a return cannot be cancelled. Returns show on the invoice, on the customer's page and in **Reports → Sales returns**.
+
+## 8. Expenses
+**Money → Expenses → Record an expense:** choose the category (Rent, Electricity, Salary, Internet, Transport, Maintenance, Tea / Refreshments, Office expense, Miscellaneous, or one you add under *Categories*), the date (not in the future), the amount, how it was paid, who was paid and what it was for. You can attach a photo or PDF of the bill (up to 5 MB); it is kept privately and opens only for people who may see expenses. The expense gets a number (EXP-000123).
+You can **correct an expense only on the day it was entered** (managers); after that it can only be **cancelled** (reason and password) and entered again. A cancelled expense stays in the list but no longer counts anywhere. Cashiers can record expenses and see the list; they cannot correct or cancel.
+
+## 9. Reports & dashboard
+### The dashboard
+Managers and administrators see **Business at a glance** at the top of the dashboard: choose *Today, Yesterday, This week, This month, Last month* or your own dates. Each card shows the figure for the period and how it compares with the period just before: what was invoiced, what is left after returns, service jobs delivered, money received, what is still unpaid on the period's invoices, purchases and expenses. People allowed to see profit also see **gross profit** (with the margin) and **net profit**. Two charts show sales (and gross profit) by day, week or month, and the last 12 months against the year before; below them are the best sellers and the latest sales, payments, expenses and service jobs. Cashiers and technicians see only what their role allows (a technician sees "My open jobs").
+
+### Reports
+**Money → Reports** lists every report you may open: sales summary, sales register, sales by product / category / customer / cashier, sales returns, top sellers and slow movers, stock valuation, purchases and purchase returns, supplier balances, customer balances, service jobs and technician performance, money in and out by payment method, expenses, the **closing summary** of a day, and **profit**.
+* Pick the **period** (a quick choice or your own dates) and the filters the report offers, then *Show report*. On a long report a **find box** narrows the rows as you type.
+* **Print** opens a clean A4 page. **PDF, Excel and CSV** (for people allowed to export) download a file with exactly the same figures; Excel and CSV open as real numbers you can add up.
+* **Cost and profit columns** appear only for people allowed to see them; the same report, printed or exported by someone without that permission, simply does not contain them.
+* **Profit** shows the whole calculation line by line: product sales, returns, **service revenue (charges and parts)**, the cost of goods and of the parts used, gross profit, then expenses, stock lost, parts written off and the difference on goods sent back to suppliers, and net profit; below it the same by day, week, month or year.
+* **Closing summary:** at closing time choose *Today*, count the cash in the drawer and compare it with the **Net movement** of the *Cash* row (money received, less refunds, supplier payments and expenses paid in cash).
 ## 10. Administration
 
 ### Users

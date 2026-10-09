@@ -27,8 +27,8 @@ class InventoryService
 {
     /** movement type => direction (+1 adds stock, -1 removes it) */
     public const DIRECTION = [
-        'opening' => 1, 'purchase' => 1, 'sale_return' => 1, 'sale_void' => 1, 'service_return' => 1, 'adjustment_in' => 1,
-        'purchase_return' => -1, 'purchase_void' => -1, 'sale' => -1, 'service_consumption' => -1, 'adjustment_out' => -1,
+        'opening' => 1, 'purchase' => 1, 'sale_return' => 1, 'sale_void' => 1, 'service_return' => 1, 'adjustment_in' => 1, 'purchase_return_void' => 1,
+        'purchase_return' => -1, 'purchase_void' => -1, 'sale' => -1, 'service_consumption' => -1, 'adjustment_out' => -1, 'sale_return_void' => -1,
     ];
 
     /** How a movement affects the average cost. */
@@ -43,6 +43,7 @@ class InventoryService
         'sale_void' => self::COST_MODE_BLEND, 'service_return' => self::COST_MODE_BLEND, 'adjustment_in' => self::COST_MODE_BLEND,
         'purchase_return' => self::COST_MODE_UNWIND, 'purchase_void' => self::COST_MODE_UNWIND,
         'sale' => self::COST_MODE_ISSUE, 'service_consumption' => self::COST_MODE_ISSUE, 'adjustment_out' => self::COST_MODE_ISSUE,
+        'sale_return_void' => self::COST_MODE_UNWIND, 'purchase_return_void' => self::COST_MODE_BLEND,
     ];
 
     /** Types whose cost becomes the product's "last purchase cost". */

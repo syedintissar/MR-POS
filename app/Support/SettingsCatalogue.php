@@ -40,7 +40,7 @@ final class SettingsCatalogue
             // ---- Sales --------------------------------------------------------
             'sales.max_discount_percent' => ['group' => 'sales', 'type' => 'decimal', 'default' => '5.00', 'label' => 'Maximum cashier discount (%)', 'help' => 'Higher discounts need manager approval.', 'rules' => 'required|numeric|min:0|max:100'],
             'sales.void_window_hours' => ['group' => 'sales', 'type' => 'int', 'default' => 24, 'label' => 'Sale void window (hours)', 'help' => 'After this, use a sales return instead.', 'rules' => 'required|integer|min:0|max:8760'],
-            'sales.store_credit_enabled' => ['group' => 'sales', 'type' => 'bool', 'default' => true, 'label' => 'Allow store credit on returns', 'rules' => 'boolean'],
+            'sales.store_credit_enabled' => ['group' => 'sales', 'type' => 'bool', 'default' => true, 'label' => 'A sales return may leave store credit', 'help' => 'The customer keeps the value of returned goods as credit and can spend it on their next sale (as "Customer credit"). Walk-in customers always get the money back.', 'rules' => 'boolean'],
             'sales.round_to' => ['group' => 'sales', 'type' => 'select', 'default' => '0', 'label' => 'Round invoice total to', 'options' => ['0' => 'No rounding', '1' => 'Nearest Rs. 1', '5' => 'Nearest Rs. 5', '10' => 'Nearest Rs. 10'], 'rules' => 'required|in:0,1,5,10'],
 
             // ---- Inventory ----------------------------------------------------

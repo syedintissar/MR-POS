@@ -66,11 +66,13 @@ class SaleController extends Controller
     public function show(Request $request, Sale $sale): View
     {
         $this->authorizeSale($request->user(), $sale);
-        $sale->load(['items.product', 'customer', 'cashier', 'approver', 'voider', 'allocations.payment.method']);
+        $sale->load(['items.product', 'customer', 'cashier', 'approver', 'voider', 'allocations.payment.method', 'returns']);
         $showCost = $request->user()->can('products.view_cost');
 
         return view('sales.show', [
             'sale' => $sale,
+            'canReturn' => $request->user()->can('sale_returns.create') && ! $sale->isVoided(),
+            'canSeeReturns' => $request->user()->can('sale_returns.view'),
             'showCost' => $showCost,
             'cost' => $showCost ? $sale->items->reduce(fn ($c, $i) => bcadd($c, bcmul((string) $i->quantity, (string) $i->unit_cost, 4), 4), '0.0000') : null,
             'canVoid' => $request->user()->can('sales.void'),

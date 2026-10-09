@@ -12,6 +12,7 @@ use App\Exceptions\DuplicatePhoneException;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\ServiceJob;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
@@ -113,6 +114,7 @@ class CustomerController extends Controller
                 'paidTotal' => (string) CustomerPayment::query()->where('customer_id', $customer->id)->where('type', 'receipt')->where('status', 'posted')->sum('amount'),
                 'lastPayment' => CustomerPayment::query()->where('customer_id', $customer->id)->where('type', 'receipt')->where('status', 'posted')->latest('payment_date')->first(),
                 'recentSales' => Sale::query()->where('customer_id', $customer->id)->orderByDesc('sale_date')->orderByDesc('id')->limit(10)->get(),
+                'recentReturns' => $user->can('sale_returns.view') ? SaleReturn::query()->with('sale:id,invoice_no')->where('customer_id', $customer->id)->orderByDesc('return_date')->orderByDesc('id')->limit(10)->get() : collect(),
                 'recentPayments' => CustomerPayment::query()->with('method:id,name')->where('customer_id', $customer->id)->where('type', 'receipt')->orderByDesc('payment_date')->orderByDesc('id')->limit(10)->get(),
                 'statement' => $this->accounts->statement($customer->id, $range['from'] ?? null, $range['to'] ?? null),
                 'from' => $range['from'] ?? null,

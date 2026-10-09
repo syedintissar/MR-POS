@@ -51,7 +51,7 @@ class IntegrityCheckCommand extends Command
             $problems[] = $message;
         }
 
-        // Later phases add their checks here (returns, expenses ...).
+        // Returns are checked inside the sales, customer and supplier services above (Phase 8); later phases add theirs here.
 
         Cache::forever('integrity.last', ['ran_at' => now()->toDateTimeString(), 'problems' => array_slice($problems, 0, 20), 'total' => count($problems)]);
 
@@ -64,7 +64,7 @@ class IntegrityCheckCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments, invoices and service jobs all agree with their ledgers.');
+        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments, invoices, returns and service jobs all agree with their ledgers.');
 
         return self::SUCCESS;
     }

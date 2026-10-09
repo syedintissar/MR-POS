@@ -65,6 +65,8 @@ class StockMovement extends Model
             'service_return' => 'Returned from repair',
             'adjustment_in' => 'Adjustment (added)',
             'adjustment_out' => 'Adjustment (removed)',
+            'sale_return_void' => 'Customer return cancelled',
+            'purchase_return_void' => 'Return to supplier cancelled',
         ][$type] ?? $type;
     }
 }

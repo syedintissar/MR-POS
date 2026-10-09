@@ -56,6 +56,7 @@ class CustomerLedgerEntry extends Model
             'refund' => 'Refund paid',
             'refund_void' => 'Refund cancelled',
             'sale_return' => 'Goods returned',
+            'sale_return_void' => 'Return cancelled',
             'balance_adjustment' => 'Balance adjustment',
         ][$type] ?? $type;
     }

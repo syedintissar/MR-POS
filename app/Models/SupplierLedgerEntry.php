@@ -53,6 +53,8 @@ class SupplierLedgerEntry extends Model
             'payment_void' => 'Payment cancelled',
             'purchase_return' => 'Goods returned',
             'refund_received' => 'Refund received',
+            'purchase_return_void' => 'Return cancelled',
+            'refund_received_void' => 'Refund cancelled',
             'balance_adjustment' => 'Balance adjustment',
         ][$type] ?? $type;
     }

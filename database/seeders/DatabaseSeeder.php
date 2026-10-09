@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             CatalogueSeeder::class,
             PaymentMethodSeeder::class,
             ServiceTypeSeeder::class,
+            ExpenseCategorySeeder::class,
         ]);
     }
 }

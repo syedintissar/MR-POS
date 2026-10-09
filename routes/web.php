@@ -13,14 +13,18 @@ use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\PurchaseReturnController;
 use App\Http\Controllers\ReceivablesController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\ServiceJobController;
 use App\Http\Controllers\ServiceJobWorkController;
 use App\Http\Controllers\ServiceTypeController;
@@ -214,6 +218,64 @@ Route::middleware('auth')->group(function () {
             Route::put('{type}', [ServiceTypeController::class, 'update'])->whereNumber('type')->name('update');
             Route::post('{type}/toggle', [ServiceTypeController::class, 'toggle'])->whereNumber('type')->name('toggle');
         });
+    });
+
+    // ---- Phase 8: expenses, returns, profit and reports ----------------------------------------------------------
+
+    Route::prefix('expenses')->name('expenses.')->group(function () {
+        Route::get('/', [ExpenseController::class, 'index'])->middleware('can:expenses.view')->name('index');
+        Route::middleware('can:expenses.create')->group(function () {
+            Route::get('create', [ExpenseController::class, 'create'])->name('create');
+            Route::post('/', [ExpenseController::class, 'store'])->name('store');
+        });
+        Route::prefix('categories')->name('categories')->group(function () {
+            Route::get('/', [ExpenseController::class, 'categories'])->middleware('can:expenses.view')->name('');
+            Route::middleware('can:expenses.edit')->group(function () {
+                Route::post('/', [ExpenseController::class, 'storeCategory'])->name('.store');
+                Route::put('{category}', [ExpenseController::class, 'updateCategory'])->whereNumber('category')->name('.update');
+                Route::post('{category}/toggle', [ExpenseController::class, 'toggleCategory'])->whereNumber('category')->name('.toggle');
+            });
+        });
+        Route::get('{expense}', [ExpenseController::class, 'show'])->whereNumber('expense')->middleware('can:expenses.view')->name('show');
+        Route::get('{expense}/attachment', [ExpenseController::class, 'attachment'])->whereNumber('expense')->middleware('can:expenses.view')->name('attachment');
+        Route::middleware('can:expenses.edit')->group(function () {
+            Route::get('{expense}/edit', [ExpenseController::class, 'edit'])->whereNumber('expense')->name('edit');
+            Route::put('{expense}', [ExpenseController::class, 'update'])->whereNumber('expense')->name('update');
+        });
+        Route::post('{expense}/void', [ExpenseController::class, 'voidExpense'])->whereNumber('expense')->middleware(['can:expenses.void', 'password.confirm'])->name('void');
+    });
+
+    Route::prefix('sale-returns')->name('sale-returns.')->group(function () {
+        Route::get('/', [SaleReturnController::class, 'index'])->middleware('can:sale_returns.view')->name('index');
+        Route::middleware('can:sale_returns.create')->group(function () {
+            Route::get('create', [SaleReturnController::class, 'create'])->name('create');
+            Route::post('sales/{sale}', [SaleReturnController::class, 'store'])->whereNumber('sale')->name('store');
+        });
+        Route::get('{saleReturn}', [SaleReturnController::class, 'show'])->whereNumber('saleReturn')->middleware('can:sale_returns.view')->name('show');
+        Route::post('{saleReturn}/void', [SaleReturnController::class, 'voidReturn'])->whereNumber('saleReturn')->middleware(['can:sales.void', 'password.confirm'])->name('void');
+        // the original receipt opens through a signed link (ten minutes); later prints are reprints, marked DUPLICATE and recorded
+        Route::get('{saleReturn}/print', [SaleReturnController::class, 'print'])->whereNumber('saleReturn')->middleware('signed')->name('print');
+        Route::get('{saleReturn}/reprint', [SaleReturnController::class, 'reprint'])->whereNumber('saleReturn')->name('reprint');
+    });
+
+    Route::prefix('purchase-returns')->name('purchase-returns.')->group(function () {
+        Route::get('/', [PurchaseReturnController::class, 'index'])->middleware('can:purchase_returns.view')->name('index');
+        Route::middleware('can:purchase_returns.create')->group(function () {
+            Route::get('create', [PurchaseReturnController::class, 'create'])->name('create');
+            Route::post('purchases/{purchase}', [PurchaseReturnController::class, 'store'])->whereNumber('purchase')->name('store');
+            Route::post('free', [PurchaseReturnController::class, 'storeFree'])->name('store-free');
+        });
+        Route::get('{purchaseReturn}', [PurchaseReturnController::class, 'show'])->whereNumber('purchaseReturn')->middleware('can:purchase_returns.view')->name('show');
+        Route::get('{purchaseReturn}/print', [PurchaseReturnController::class, 'print'])->whereNumber('purchaseReturn')->middleware('can:purchase_returns.view')->name('print');
+        Route::post('{purchaseReturn}/void', [PurchaseReturnController::class, 'voidReturn'])->whereNumber('purchaseReturn')->middleware(['can:purchases.void', 'password.confirm'])->name('void');
+    });
+
+    // Reports: the controller checks the permission of each report (and cuts cost and profit columns out for people without theirs); exports need reports.export.
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/', [ReportController::class, 'index'])->name('index');
+        Route::get('{report}', [ReportController::class, 'show'])->where('report', '[a-z\-]+')->name('show');
+        Route::get('{report}/print', [ReportController::class, 'print'])->where('report', '[a-z\-]+')->name('print');
+        Route::get('{report}/export/{format}', [ReportController::class, 'export'])->where('report', '[a-z\-]+')->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('export');
     });
 
     // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------

@@ -12,6 +12,8 @@ use App\Models\Sale;
 use App\Models\ServiceJob;
 use App\Models\Supplier;
 use App\Services\Backup\BackupHealth;
+use App\Services\Reports\DashboardService;
+use App\Services\Reports\ReportFilters;
 use App\Services\Service\ServiceJobAccess;
 use App\Services\SettingsService;
 use App\Services\SystemCheck;
@@ -19,11 +21,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use Throwable;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, BackupHealth $health, SettingsService $settings, SystemCheck $systemCheck): View
+    public function __invoke(Request $request, BackupHealth $health, SettingsService $settings, SystemCheck $systemCheck, DashboardService $dashboard): View
     {
         $user = $request->user();
 
@@ -89,7 +92,24 @@ class DashboardController extends Controller
             ];
         }
 
+        // The business at a glance: people who see every sale choose a period; profit appears only for people who may see profit.
+        $glance = $user->can('sales.view_all') ? $this->glance($request, $dashboard, $user->can('reports.profit'), $user->can('dashboard.financials')) : null;
+        $latest = $dashboard->latest(
+            $user->can('sales.view_all'), $user->can('expenses.view') && $user->can('dashboard.financials'),
+            $user->can('customer_payments.view') && $user->can('dashboard.financials'), $user->can('service_jobs.view_all'),
+        );
+
+        // A technician's own open jobs, most urgent first.
+        $myJobs = null;
+        if (! $user->can('service_jobs.view_all') && $user->can('service_jobs.view_assigned')) {
+            $myJobs = ServiceJobAccess::visibleTo($user)->open()->with('customer:id,name,is_walk_in')
+                ->orderByRaw('expected_delivery_at IS NULL')->orderBy('expected_delivery_at')->orderBy('received_at')->limit(8)->get();
+        }
+
         return view('dashboard', [
+            'glance' => $glance,
+            'latest' => $latest,
+            'myJobs' => $myJobs,
             'service' => $service,
             'stockAlerts' => $stockAlerts,
             'payables' => $payables,
@@ -103,6 +123,39 @@ class DashboardController extends Controller
             // Details for the person who maintains the server only.
             'systemChecks' => $user->can('settings.manage') ? $systemCheck->run() : [],
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function glance(Request $request, DashboardService $dashboard, bool $withProfit, bool $withFinancials): array
+    {
+        // only plain text is accepted from the address bar (a crafted ?preset[]=x must not break the page)
+        $text = fn (string $key) => is_string($request->query($key)) ? $request->query($key) : null;
+        $preset = $text('preset') ?? 'today';
+        $input = in_array($preset, ['today', 'yesterday', 'this_week', 'this_month', 'last_month', 'custom'], true)
+            ? ['preset' => $preset, 'from' => $text('from'), 'to' => $text('to')]
+            : ['preset' => 'today'];
+        try {
+            $filters = ReportFilters::make($input);
+            if ($filters->days() > 3660) {
+                throw new InvalidArgumentException('too long');
+            }
+        } catch (Throwable) {
+            $filters = ReportFilters::make(['preset' => 'today']);
+        }
+
+        [$pFrom, $pTo] = $dashboard->previous($filters->from, $filters->to);
+
+        return [
+            'filters' => $filters,
+            'presets' => ['today' => 'Today', 'yesterday' => 'Yesterday', 'this_week' => 'This week', 'this_month' => 'This month', 'last_month' => 'Last month', 'custom' => 'Choose dates'],
+            'now' => $dashboard->figures($filters->from, $filters->to, $withProfit, $withFinancials),
+            'before' => $dashboard->figures($pFrom, $pTo, $withProfit, $withFinancials),
+            'trend' => $dashboard->trend($filters->from, $filters->to, $withProfit),
+            'year' => $dashboard->yearOnYear(),
+            'top' => $dashboard->topProducts($filters->from, $filters->to),
+            'withProfit' => $withProfit,
+            'withFinancials' => $withFinancials,
+        ];
     }
 
     private function dbVersion(): ?string

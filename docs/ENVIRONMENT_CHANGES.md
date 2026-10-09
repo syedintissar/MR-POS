@@ -153,3 +153,18 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | Drills | The browser drill and all tests ran on the scratch schema `mrpos_test`, never on the real database. Backup and restore with service data were proven by an automated test in a sandbox folder, so the owner's real uploaded files were not touched |
 | `.env` | Not touched in this phase (see the Phase 6 section for what happened to it) |
 | Not done | Windows service, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |
+
+---
+
+## 2026-10-09: Phase 8 additions
+
+| Change | Detail |
+|---|---|
+| Project packages | None added (the PDF and spreadsheet libraries of earlier phases are reused). No change outside `D:\MR-POS` apart from the items below |
+| Real database `mrpos` | The owner's administrator exists, so **the database was not reset**. It was **backed up first** (`mrpos_2026-10-09_161453_manual.zip`), then the one Phase 8 migration was applied (`expense_categories`, `expenses`, `sale_returns`, `sale_return_items`, `purchase_returns`, `purchase_return_items`, and three widened ledger `CHECK`s) and the nine default expense categories were created. The integrity check and `pos:doctor` passed afterwards; the user, the walk-in customer and every earlier record were untouched. The backup file stays in `storage\app\backups\manual` |
+| Front-end assets | `npm run build` was run (dashboard charts and the new screens); `public/build` is git-ignored: **run it again after copying a new release** |
+| Private files | Expense bills are stored in `storage\app\private\expenses\<year>\`. This folder is covered by the backup (it is part of the uploaded files) |
+| Temporary processes | A PHP server on port 8099 (started by me, against the scratch schema `mrpos_test`) served the browser drills and was **stopped** each time; headless Edge used a throw-away profile and debugging port 9333 on 127.0.0.1 only. The other servers on this PC (the owner's own test server and the PHP server on port 8000) were not touched. A first full test run was stopped on purpose and restarted after the last features were added |
+| Drills | The browser drills, the concurrency tests (real separate PHP processes) and the full test suite ran on the scratch schema `mrpos_test`, never on the real database. The mutation checks (the row locks of the return actions removed for one test run each, then restored byte for byte) ran there too |
+| `.env` | Not touched in this phase |
+| Not done | Windows service for MariaDB, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |

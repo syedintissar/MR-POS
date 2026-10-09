@@ -212,6 +212,49 @@ class SupplierAccountService
             $problems[] = "Purchase {$r->purchase_no} lists {$r->bought} units but only {$r->stocked} went into stock.";
         }
 
+        // what each bill says was sent back is what its posted returns add up to, line by line
+        foreach (DB::select("SELECT * FROM (
+                                SELECT p.purchase_no, p.returned_amount,
+                                       COALESCE((SELECT SUM(r.total) FROM purchase_returns r WHERE r.purchase_id = p.id AND r.status = 'posted'), 0) AS real_returned
+                                  FROM purchases p) t
+                              WHERE ABS(returned_amount - real_returned) > 0.004") as $r) {
+            $problems[] = "Purchase {$r->purchase_no}: it says {$r->returned_amount} was sent back but its returns add up to {$r->real_returned}.";
+        }
+        foreach (DB::select("SELECT * FROM (
+                                SELECT p.purchase_no, pi.returned_quantity,
+                                       COALESCE((SELECT SUM(ri.quantity) FROM purchase_return_items ri JOIN purchase_returns r ON r.id = ri.purchase_return_id WHERE ri.purchase_item_id = pi.id AND r.status = 'posted'), 0) AS real_returned
+                                  FROM purchase_items pi JOIN purchases p ON p.id = pi.purchase_id) t
+                              WHERE ABS(returned_quantity - real_returned) > 0.0005") as $r) {
+            $problems[] = "Purchase {$r->purchase_no}: a line shows {$r->returned_quantity} sent back but its returns add up to {$r->real_returned}.";
+        }
+
+        // a return's lines add up to its header, the units that left stock are exactly its lines (and are back again when it was cancelled),
+        // and the supplier's account carries it once (and reverses it once when cancelled), with the refund the same way
+        foreach (DB::select("SELECT * FROM (
+                                SELECT r.return_no, r.status, r.subtotal, r.tax_amount, r.total,
+                                       COALESCE((SELECT SUM(ri.net_amount) FROM purchase_return_items ri WHERE ri.purchase_return_id = r.id), 0) AS lines_net,
+                                       COALESCE((SELECT SUM(ri.tax_amount) FROM purchase_return_items ri WHERE ri.purchase_return_id = r.id), 0) AS lines_tax,
+                                       COALESCE((SELECT SUM(ri.quantity) FROM purchase_return_items ri WHERE ri.purchase_return_id = r.id), 0) AS sent,
+                                       COALESCE((SELECT SUM(-m.quantity) FROM stock_movements m WHERE m.source_type = 'purchase_return' AND m.source_id = r.id AND m.movement_type = 'purchase_return'), 0) AS left_stock,
+                                       COALESCE((SELECT SUM(m.quantity) FROM stock_movements m WHERE m.source_type = 'purchase_return' AND m.source_id = r.id AND m.movement_type = 'purchase_return_void'), 0) AS came_back,
+                                       COALESCE((SELECT SUM(l.debit) FROM supplier_ledger_entries l WHERE l.entry_type = 'purchase_return' AND l.source_type = 'purchase_return' AND l.source_id = r.id), 0) AS booked,
+                                       COALESCE((SELECT SUM(l.credit) FROM supplier_ledger_entries l WHERE l.entry_type = 'purchase_return_void' AND l.source_type = 'purchase_return' AND l.source_id = r.id), 0) AS reversed
+                                  FROM purchase_returns r) t
+                              WHERE ABS(subtotal - lines_net) > 0.004 OR ABS(tax_amount - lines_tax) > 0.004 OR ABS(sent - left_stock) > 0.0005
+                                 OR ABS(booked - total) > 0.004
+                                 OR (status = 'voided' AND (ABS(came_back - sent) > 0.0005 OR ABS(reversed - total) > 0.004))
+                                 OR (status = 'posted' AND (came_back <> 0 OR reversed <> 0))") as $r) {
+            $problems[] = "Return {$r->return_no}: its lines, the stock that left, or the supplier's account do not match what the return says.";
+        }
+        foreach (DB::select("SELECT * FROM (
+                                SELECT r.return_no, sp.payment_no, sp.amount, sp.status,
+                                       COALESCE((SELECT SUM(l.credit) FROM supplier_ledger_entries l WHERE l.entry_type = 'refund_received' AND l.source_type = 'supplier_payment' AND l.source_id = sp.id), 0) AS booked,
+                                       COALESCE((SELECT SUM(l.debit) FROM supplier_ledger_entries l WHERE l.entry_type = 'refund_received_void' AND l.source_type = 'supplier_payment' AND l.source_id = sp.id), 0) AS reversed
+                                  FROM purchase_returns r JOIN supplier_payments sp ON sp.id = r.supplier_payment_id) t
+                              WHERE ABS(booked - amount) > 0.004 OR (status = 'voided' AND ABS(reversed - amount) > 0.004) OR (status = 'posted' AND reversed <> 0)") as $r) {
+            $problems[] = "Refund {$r->payment_no} for return {$r->return_no} is not on the supplier's account exactly once.";
+        }
+
         return $problems;
     }
 

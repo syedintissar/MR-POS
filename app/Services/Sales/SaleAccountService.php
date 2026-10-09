@@ -98,6 +98,35 @@ class SaleAccountService
             $problems[] = "Invoice {$r->invoice_no}: {$r->sold} units are on the invoice but the stock ledger shows {$r->taken} taken out and {$r->given_back} given back.";
         }
 
+        // what each invoice says was returned is what its posted returns add up to
+        foreach (DB::select("SELECT * FROM (
+                                SELECT s.invoice_no, s.returned_amount,
+                                       COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id = s.id AND r.status = 'posted'), 0) AS real_returned
+                                  FROM sales s) t
+                              WHERE ABS(returned_amount - real_returned) > 0.004") as $r) {
+            $problems[] = "Invoice {$r->invoice_no}: it says {$r->returned_amount} was returned but its returns add up to {$r->real_returned}.";
+        }
+        foreach (DB::select("SELECT * FROM (
+                                SELECT s.invoice_no, i.product_name, i.returned_quantity,
+                                       COALESCE((SELECT SUM(ri.quantity) FROM sale_return_items ri JOIN sale_returns r ON r.id = ri.sale_return_id WHERE ri.sale_item_id = i.id AND r.status = 'posted'), 0) AS real_returned
+                                  FROM sale_items i JOIN sales s ON s.id = i.sale_id) t
+                              WHERE ABS(returned_quantity - real_returned) > 0.0005") as $r) {
+            $problems[] = "Invoice {$r->invoice_no}: {$r->product_name} shows {$r->returned_quantity} returned but its returns add up to {$r->real_returned}.";
+        }
+        // a return's lines add up to its header, and the units put back in stock are exactly the restocked lines (and gone again when it was cancelled)
+        foreach (DB::select("SELECT * FROM (
+                                SELECT r.return_no, r.status, r.net_total, r.tax_total, r.total,
+                                       COALESCE((SELECT SUM(ri.net_amount) FROM sale_return_items ri WHERE ri.sale_return_id = r.id), 0) AS lines_net,
+                                       COALESCE((SELECT SUM(ri.tax_amount) FROM sale_return_items ri WHERE ri.sale_return_id = r.id), 0) AS lines_tax,
+                                       COALESCE((SELECT SUM(ri.quantity) FROM sale_return_items ri WHERE ri.sale_return_id = r.id AND ri.restock = 1), 0) AS restocked,
+                                       COALESCE((SELECT SUM(m.quantity) FROM stock_movements m WHERE m.source_type = 'sale_return' AND m.source_id = r.id AND m.movement_type = 'sale_return'), 0) AS put_back,
+                                       COALESCE((SELECT SUM(-m.quantity) FROM stock_movements m WHERE m.source_type = 'sale_return' AND m.source_id = r.id AND m.movement_type = 'sale_return_void'), 0) AS taken_again
+                                  FROM sale_returns r) t
+                              WHERE ABS(net_total - lines_net) > 0.004 OR ABS(tax_total - lines_tax) > 0.004 OR ABS(restocked - put_back) > 0.0005
+                                 OR (status = 'voided' AND ABS(taken_again - put_back) > 0.0005) OR (status = 'posted' AND taken_again <> 0)") as $r) {
+            $problems[] = "Return {$r->return_no}: its lines, or the units put back in stock, do not match what the return says.";
+        }
+
         // the walk-in customer holds no balance (BR-11)
         foreach (DB::select('SELECT code, balance FROM customers WHERE is_walk_in = 1 AND balance <> 0') as $r) {
             $problems[] = "The walk-in customer {$r->code} has a balance of {$r->balance}; it must always be 0.";

@@ -59,6 +59,11 @@ class Sale extends Model
         return $this->hasMany(SalePayment::class);
     }
 
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class)->orderBy('id');
+    }
+
     public function isVoided(): bool
     {
         return $this->status === self::VOIDED;

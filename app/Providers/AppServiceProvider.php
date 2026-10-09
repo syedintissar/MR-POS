@@ -8,11 +8,14 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
+use App\Models\Expense;
 use App\Models\HeldSale;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Purchase;
+use App\Models\PurchaseReturn;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\ServiceJob;
 use App\Models\ServiceType;
 use App\Models\Setting;
@@ -70,6 +73,9 @@ class AppServiceProvider extends ServiceProvider
             'held_sale' => HeldSale::class,
             'service_job' => ServiceJob::class,
             'service_type' => ServiceType::class,
+            'expense' => Expense::class,
+            'sale_return' => SaleReturn::class,
+            'purchase_return' => PurchaseReturn::class,
         ]);
 
         $this->applySessionTimeout();

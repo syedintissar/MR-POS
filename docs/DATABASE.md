@@ -1043,3 +1043,53 @@ Job flows: **idempotency / customer (named) → job → job lines → products (
 18. A delivered job of a named customer is on the account exactly once (and nothing else is).
 19. A receipt is never used for more than its amount, counting invoices that stand, jobs that stand and refunds (replaces the check of §11 item 9).
 20. Every refund handed to a named customer is on the account exactly once.
+
+## 14. Phase 8 implementation notes (expenses, returns, profit and reports)
+
+Migration `2026_10_10_700000_create_returns_and_expenses` (additive: no existing table lost data; applied to the real `mrpos` database after a backup).
+
+| Item | As built | Why |
+|---|---|---|
+| `expense_categories` | name (unique), active flag, order. The nine categories of EXP-01 (Rent, Electricity, Salary, Internet, Transport, Maintenance, Tea / Refreshments, Office expense, Miscellaneous) are created by the migration and by `ExpenseCategorySeeder` (safe to run again) | A category that has been used is switched off, never deleted |
+| `expenses` | `expense_no` (`EXP-`), category, `expense_date`, `amount > 0`, payment method (never "Customer credit"), payee, description, attachment path and original name, status `posted` / `voided` with who, when and why, `created_by`, `updated_by`. `CHECK`s: amount above zero, status list, "voided exactly when it has a void time" | An expense is corrected only on the day it was entered (EXP-03) and cancelled after that; nothing is deleted |
+| Expense attachments | jpg, png or pdf up to 5 MB, stored under `storage/app/private/expenses/<year>/<random name>` (never in `public`), served only through the controller to people who may see expenses, with `nosniff`; every opening is audited; a failed save deletes the file again | A bill is private business information |
+| `sale_returns` | `return_no` (`SRN-`), `sale_id`, `customer_id`, `return_date`, `net_total`, `tax_total`, `total`, **`applied_to_due`** (taken off what the customer still owed), **`refund_amount`**, **`store_credit_amount`**, links to the refund payment and the store-credit receipt, reason, status, void details. `CHECK`: `applied_to_due + refund_amount + store_credit_amount = total` | The three ways the value of a return is settled can never add up to more or less than the return |
+| `sale_return_items` | the invoice line, product, quantity, `unit_net_price`, `unit_tax`, `net_amount`, `tax_amount`, `line_total`, **`unit_cost`** (the cost on the invoice line), **`item_condition`** (`resellable` / `damaged` / `defective`; not `condition`, which is a reserved word in MariaDB), **`restock`** | The cost stays on the return line so profit never depends on today's average cost |
+| `purchase_returns` | `return_no` (`PRN-`), supplier, optional `purchase_id` (a return without a bill is allowed), `subtotal`, `tax_amount`, `total > 0`, `settlement` (`adjust_balance` / `refund`), `supplier_payment_id` (the refund received), reason, status, void details. `CHECK`: `settlement = 'refund'` exactly when a refund payment is linked | Money received from a supplier always has its numbered payment |
+| `purchase_return_items` | the bill line (or none), product, quantity, **`unit_cost`** (the cost the stock left at), `net_amount` (what the supplier credits), tax, `line_total` | Credit and stock cost are kept apart: their difference is a figure in the profit report |
+| `sale_items.returned_quantity`, `sales.returned_amount`, `purchase_items.returned_quantity`, `purchases.returned_amount` | Existing cache columns (Phase 4/5) now written by the return actions. `CHECK returned_quantity <= quantity` | A line can never be returned more than once |
+| Extended `CHECK`s | `chk_movement_type` gains `sale_return_void` and `purchase_return_void`; `chk_customer_ledger_type` gains `sale_return_void`; `chk_supplier_ledger_type` gains `purchase_return_void` and `refund_received_void` | The ledgers can say what they must; nothing else |
+
+### Posting rules as implemented
+| Operation (action) | Stock | Ledger | Receipts / payments | Other |
+|---|---|---|---|---|
+| Sales return (`CreateSaleReturn`) | `sale_return` +qty at the **cost on the invoice line**, only for lines marked "restock" (a service item or a damaged line puts nothing back) | customer: `sale_return` credit for the whole value (named customers only) | refund: a `refund` payment + `refund` debit; store credit: a receipt in the "Customer credit" method with **no ledger line of its own** (the return already credited the account) | `sale_items.returned_quantity`, `sales.returned_amount`, invoice due recomputed; audit |
+| Cancel a sales return (`VoidSaleReturn`) | `sale_return_void` −qty (refused when the units were sold again) | `sale_return_void` debit, `refund_void` credit | the refund and the store-credit receipt are marked cancelled; **refused when the store credit has already been spent** | caches restored |
+| Purchase return (`CreatePurchaseReturn`) | `purchase_return` −qty at the bill line's **landed cost** (free-form: the product's average cost); refused when the goods are no longer there | supplier: `purchase_return` debit for the credit; a refund: `refund_received` credit | a `supplier_payments` row of type `refund` | `purchase_items.returned_quantity`, `purchases.returned_amount`, bill due recomputed |
+| Cancel a purchase return (`VoidPurchaseReturn`) | `purchase_return_void` +qty at the cost it left at | `purchase_return_void` credit, `refund_received_void` debit | the refund payment is marked cancelled | caches restored |
+| Expense (`SaveExpense`, `VoidExpense`) | none | none (expenses have no ledger: they are money paid out, reported by method) | none | numbered `EXP-`; edited only the day it was entered, with old and new values audited |
+
+### How a return is valued and settled
+* **Value of a line** = the line's share of its **net amount** (after the line discount **and** the invoice discount share) and of its **tax**, by quantity. Returning everything that is left of a line takes exactly what is left, so the pieces always add up to the line and no cent is lost.
+* **Sales return settlement order:** 1. reduce what the customer still owes on that invoice (named customers only); 2. the rest is money handed back (`sale_returns.refund`, a payment method is chosen) or store credit (setting `sales.store_credit_enabled`, named customers only). The walk-in customer has no account, so for them it is always money back.
+* **Purchase return settlement:** the credit first reduces what the shop still owes on that bill; what is left over (the bill was already paid, or the return has no bill) stays on the supplier's account as credit, or the supplier pays it back as money (needs `supplier_payments.create`).
+* **Exchange:** store credit is spendable at the till as "Customer credit" (Phase 6), so an exchange is a return with store credit followed by a normal sale. A one-click exchange screen is not built.
+
+### Lock order and the "first read" rule
+Sales return: **customer (named; read before the transaction so the lock is its first read) → invoice → invoice lines → products (by id) → number sequences → audit.** Purchase return: **supplier → purchase → purchase lines → products (by id) → number sequences (return, then payment) → audit.** The refund payment is written before the return row because the database insists that a `refund` return points at its payment. Every action re-reads what it changes `FOR UPDATE` and judges the stored state.
+
+### Profit (`ProfitService`: the only place profit is worked out)
+`gross profit = product sales (without tax, after every discount) − sales returns + service revenue (delivered jobs, without tax: charges AND parts) − cost of goods sold (cost on each invoice line, less the cost of returned goods put back on the shelf) − cost of the parts used on delivered jobs`; `net profit = gross profit − expenses − stock lost (adjustments out less adjustments in, at cost, never the opening stock) − service parts written off ± the difference on goods sent back to suppliers (credit received less the cost of the stock that left)`.
+Rules: cancelled invoices, returns, expenses and jobs never count; tax is never revenue; every cost is the cost recorded when the thing happened; a service job counts on the day it was delivered and invoiced; the labour / parts split of a job is in proportion to its charge lines and part lines, so job discount and tax are shared the way `SaleCalculator` shares them; goods returned damaged or defective are shown as their own line (they are already inside the cost of goods sold, so they are never taken off twice). Grouping by day, week (Monday to Sunday), month or year uses the same arithmetic, and a test proves the groups add up to the whole period.
+
+### What the reports read (no report has its own copy of a figure)
+Sales and returns from `sales`, `sale_items`, `sale_returns`, `sale_return_items`; money by method from `customer_payments`, `supplier_payments` and `expenses`; stock from `products` (current stock and average cost) and `sale_items`; people's balances from `ReceivablesService` and the suppliers' purchases; service from `service_jobs`; profit from `ProfitService`. Cost columns are cut out of a report for people without `products.view_cost`, profit columns for people without `reports.profit`, before the report leaves `ReportResult::forUser`, so a screen, a print, a PDF, a CSV and an Excel file can never show what another would hide.
+
+### Integrity checks added (`pos:integrity:check`, twice a day)
+21. Every sales return of a named customer is on the account exactly once (and reversed once when cancelled).
+22. The check that every receipt is on the account leaves out store-credit receipts (they have no ledger line of their own by design).
+23. Every invoice's returned amount and every line's returned quantity equal what its posted returns add up to.
+24. A sales return's lines add up to its header, and the units put back in stock equal its restocked lines (and are gone again when it was cancelled).
+25. Every purchase's returned amount and every line's returned quantity equal what its posted returns add up to.
+26. A purchase return's lines add up to its header, the stock that left equals its lines (and came back when cancelled), and the supplier's account carries it exactly once (reversed once when cancelled).
+27. Every refund received from a supplier is on the supplier's account exactly once (reversed once when cancelled).

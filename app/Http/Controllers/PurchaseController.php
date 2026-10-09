@@ -85,7 +85,7 @@ class PurchaseController extends Controller
     public function show(Purchase $purchase): View
     {
         $this->authorize('purchases.view');
-        $purchase->load(['supplier', 'items.product.unit', 'creator', 'receiver', 'voider', 'allocations.payment.method']);
+        $purchase->load(['supplier', 'items.product.unit', 'creator', 'receiver', 'voider', 'allocations.payment.method', 'returns']);
 
         return view('purchases.show', ['purchase' => $purchase, 'methods' => PaymentMethod::query()->forSuppliers()->get()]);
     }

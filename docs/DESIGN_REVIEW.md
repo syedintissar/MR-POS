@@ -275,3 +275,46 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P7-Q3 | Read the **terms printed on the job slip** (Settings → Receipt → Service job terms; the default says devices not collected within 30 days are not the shop's responsibility) | Default wording kept |
 | P7-Q4 | How long may a finished job wait before it shows in a "forgotten jobs" list (SRV-14)? | 30 days, as in the default slip text; the list itself is the "Ready to collect" tab today |
 | P7-Q5 | Phase 8 covers **returns, expenses, profit and the reports**: which report do you want first (daily sales, who owes us, profit, stock value, technician work)? | Daily sales and profit first |
+
+## 11. Phase 8 decisions and findings
+
+### Defaults used for the questions put at the end of Phase 7 (the owner can change any of them)
+| # | Question | Default used |
+|---|---|---|
+| P8-D1 | First report wanted | **All of them are built**, starting with the ones asked for: daily sales (sales summary and closing summary), profit, who owes us, stock value, technician work |
+| P8-D2 | Service charges in profit | Shown in profit as asked: **service revenue (charges and parts, without tax, after job discounts) is counted when the job is delivered and invoiced, with the cost of its parts**; a labour-only job is pure profit; cancelled and unfinished jobs count for nothing; parts that were written off are a separate loss |
+| P8-D3 | Who may take goods back | Managers and administrators (`sale_returns.create`); a cashier can look at returns and print a copy of a receipt. Handing money back needs `sale_returns.refund` as well; without it the manager chooses store credit or taking it off the debt |
+| P8-D4 | A return always has an invoice | Yes: goods are returned **against an invoice** (the customer gets back exactly what they paid after discounts). Goods without a receipt can only be returned to a **supplier** without a bill, not from a customer |
+| P8-D5 | What a return is worth | The returned units' share of the line's net amount and tax (both discounts included); the last units of a line take what is left. Never more than was paid |
+| P8-D6 | Where the value goes | First off what the customer still owes on that invoice, then money back or store credit (a named customer; the walk-in customer always gets money back). Store credit is the customer's credit in the "Customer credit" method, spendable at the till |
+| P8-D7 | Stock on a return | Only lines marked "put back in stock" (default for *resellable*) add stock, at the cost on the invoice line; a damaged or defective line is a write-off and a service item has no stock |
+| P8-D8 | Purchase returns | Against a received purchase (never more than received less already sent back) or without a bill. The supplier credits what it billed for the units; the stock leaves at the landed cost; the credit first reduces what is owed on the bill; the rest stays as credit on the supplier's account or comes back as money |
+| P8-D9 | Cancelling a return | `sales.void` / `purchases.void` (managers), with the password and a reason. A sales return whose store credit was already spent cannot be cancelled; goods sold again cannot be taken out of stock again |
+| P8-D10 | Expenses | Cashiers may record them (`expenses.create`), managers correct (the same day only) and cancel; the bill (jpg, png, pdf up to 5 MB) is private. Expenses have no ledger |
+| P8-D11 | Reports and cost | Every report needs the permission of its area; cost columns need `products.view_cost`, profit columns `reports.profit`; PDF / Excel / CSV need `reports.export` and are audited; **printing is allowed with the report's own permission** |
+| P8-D12 | Money by method | Customer credit is not money, so it is left out of the money-in-and-out report; the report adds customer receipts, refunds, supplier payments and refunds, and expenses per method |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P8-01 | The design said a return is "credited or refunded at the user's choice". That would let a refund be paid while the customer still owed money on the same invoice | Settlement order is fixed (SRT-04): the invoice's debt first, then money or store credit |
+| P8-02 | **Store credit is not a new kind of money.** Giving it as a ledger line would credit the account twice (the return already did) | Store credit is a receipt in the "Customer credit" method with **no ledger line**, so the Phase 6 mechanism lets the customer spend it; the integrity check leaves such receipts out of "every receipt is on the account" (check 22) |
+| P8-03 | A purchase return against a bill that is still unpaid and a refund from the supplier would have made the bill say "owes 700" while the ledger said "owes 1000" | The credit is applied to the bill's debt first (as for customers); only what is left over can be refunded or kept as credit |
+| P8-04 | The supplier credits what it billed, but the stock leaves at the landed cost (freight and invoice discount are spread over the lines): the two differ | Both are kept; the **difference is a line in the profit report** ("difference on goods sent back to suppliers") so profit stays true |
+| P8-05 | The database's `CHECK` ("a refund return points at its payment") refused the first version, which wrote the return and then the payment | The payment is written first (the new test caught it before any screen was used) |
+| P8-06 | Two slips found by the tests and the browser drill: a Blade directive glued to a word (`each@endcan`) is not recognised and broke a page; and a JavaScript method I had named `valueOf` clashes with the built-in one and left the live value of the return empty | Fixed; the drill now checks the live figures. Also found: a duplicate key in the settings list and a crafted address (`?preset[]=x`) that crashed the dashboard |
+| P8-07 | **The profit engine** was written once (`ProfitService`) and everything reads it. A known-shop test (every figure worked out by hand: sales, a 60 discount, a returned and a damaged unit, a delivered job with charges, parts and a discount, a cancelled job, a written-off part, an expense and a cancelled one, a loss, the opening stock, a supplier return) proves it, and another proves that day / week / month / year groups add up to the whole period | Net profit of the known shop is exactly 80.00; labour 466.67 and parts 233.33 of the 700.00 job |
+| P8-08 | **Real concurrency, with mutation checks.** Four terminals returning the same units: only the units that exist come back, the rest are refused; a return racing the cancelling of its invoice (one wins); a return racing a payment (same end state either way); the same return cancelled by three people (reversed once); the same for purchase returns; and five different operations on one customer at once (no deadlock). **With the row locks removed, the tests fail** (all four terminals "succeeded" and returned 8 of 5 units) | Locks are in place and tested |
+| P8-09 | **Real-browser drill, 39 checks** (cashier: expense, no reports, no returns; manager: dashboard with profit, charts, periods and the phone view, a return with live values, the over-return guard, the signed return receipt, stock back on the shelf, cancel with the password, purchase returns with and without a bill, reports, the PDF / Excel / CSV downloads, the find box) | One script slip was mine (the 403 page has no sign-out button) |
+| P8-10 | Comparing the SRS with what was built found gaps in the first version: the customer page had no returns, the profit report did not show the damaged-returns write-off (SRT-06 / PFT-05), no warranty indicator on the return screen (SRT-07), no search in reports, and the dashboard lacked money received, credit sales, purchases and the latest-activity lists (DASH-02 / 04) | All added and tested |
+| P8-11 | The real database holds the owner's administrator, so it was **not reset**: a backup was taken first, then the one additive migration was applied; the drills ran on the scratch schema `mrpos_test` | See ENVIRONMENT_CHANGES |
+
+### Questions for the owner
+| # | Question | Default if not answered |
+|---|---|---|
+| P8-Q1 | **Credit with a supplier:** when goods are returned for a bill that was already paid, the credit stays on the supplier's account (it shows as a negative balance, and in the supplier report). Do you want a button "use this credit on the next bill"? | Not built: today you pay the next bill's amount less the credit and note it in the payment |
+| P8-Q2 | Should there be a **time limit** on customer returns (for example 14 days from the invoice)? | No limit; managers decide |
+| P8-Q3 | Should a **restocking fee** (keeping part of the money on a return) be possible? | Not built: a return gives back exactly what was paid for the goods |
+| P8-Q4 | Do you want an **Exchange** button (return plus new sale in one screen)? | Not built: give store credit, then sell with "Customer credit" |
+| P8-Q5 | Should **rounding differences** on invoices (the "round to nearest 10" setting) be a line in the profit report? | Not included: profit is worked out on net amounts |
+| P8-Q6 | Who may see **expenses**? Cashiers may record them and see the list | Default kept; remove `expenses.view` from the Cashier role in Roles & permissions if you prefer |

@@ -360,10 +360,21 @@ class CustomerAccountService
                                 SELECT cp.receipt_no, cp.status, cp.amount,
                                        COALESCE((SELECT SUM(l.credit) FROM customer_ledger_entries l WHERE l.entry_type = 'payment' AND l.source_type = 'customer_payment' AND l.source_id = cp.id), 0) AS booked,
                                        COALESCE((SELECT SUM(l.debit) FROM customer_ledger_entries l WHERE l.entry_type = 'payment_void' AND l.source_type = 'customer_payment' AND l.source_id = cp.id), 0) AS reversed
-                                  FROM customer_payments cp JOIN customers c ON c.id = cp.customer_id
-                                 WHERE c.is_walk_in = 0 AND cp.type = 'receipt') t
+                                  FROM customer_payments cp JOIN customers c ON c.id = cp.customer_id JOIN payment_methods pm ON pm.id = cp.payment_method_id
+                                 WHERE c.is_walk_in = 0 AND cp.type = 'receipt' AND pm.kind <> 'customer_credit') t
                               WHERE ABS(booked - amount) > 0.004 OR (status = 'voided' AND ABS(reversed - amount) > 0.004) OR (status = 'posted' AND reversed <> 0)") as $r) {
             $problems[] = "Receipt {$r->receipt_no} ({$r->amount}) is on the customer's account as {$r->booked}".($r->status === 'voided' ? " and reversed by {$r->reversed}" : '').'.';
+        }
+
+        // every sales return of a named customer is on the account once (and reversed once when cancelled); store credit is a receipt in the
+        // "Customer Credit" method with no ledger line of its own, which is why the receipt check above leaves it out
+        foreach (DB::select("SELECT * FROM (
+                                SELECT r.return_no, r.status, r.total,
+                                       COALESCE((SELECT SUM(l.credit) FROM customer_ledger_entries l WHERE l.entry_type = 'sale_return' AND l.source_type = 'sale_return' AND l.source_id = r.id), 0) AS booked,
+                                       COALESCE((SELECT SUM(l.debit) FROM customer_ledger_entries l WHERE l.entry_type = 'sale_return_void' AND l.source_type = 'sale_return' AND l.source_id = r.id), 0) AS reversed
+                                  FROM sale_returns r JOIN customers c ON c.id = r.customer_id WHERE c.is_walk_in = 0) t
+                              WHERE ABS(booked - total) > 0.004 OR (status = 'voided' AND ABS(reversed - total) > 0.004) OR (status = 'posted' AND reversed <> 0)") as $r) {
+            $problems[] = "Return {$r->return_no} ({$r->total}) is on the customer's account as {$r->booked}".($r->status === 'voided' ? " and reversed by {$r->reversed}" : '').'.';
         }
 
         // every refund handed to a named customer is on the account exactly once

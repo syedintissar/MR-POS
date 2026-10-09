@@ -1,3 +1,7 @@
+@php
+    use App\Services\Reports\DashboardService as Dash;
+    use App\Support\Money;
+@endphp
 <x-layouts.app title="Dashboard">
     @if(count($warnings))
         <div class="mb-6 space-y-2">
@@ -25,6 +29,181 @@
         <p class="text-sm text-slate-500">{{ $shopName }} · signed in as {{ auth()->user()->roleName() }}</p>
     </div>
 
+    @if($glance)
+        @php
+            $f = $glance['filters']; $now = $glance['now']; $before = $glance['before']; $withProfit = $glance['withProfit']; $withFinancials = $glance['withFinancials'];
+            $chip = function (string $a, string $b) {
+                $d = Dash::change($a, $b);
+                if ($d === null) { return '<span class="text-slate-400">no earlier figure to compare</span>'; }
+                $up = (float) $d >= 0;
+
+                return '<span class="'.($up ? 'text-emerald-600' : 'text-red-600').'">'.($up ? '▲ ' : '▼ ').abs((float) $d).'%</span> <span class="text-slate-400">vs the period before</span>';
+            };
+        @endphp
+        <section class="mb-6 space-y-4" aria-label="Business at a glance">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-slate-800">Business at a glance <span class="font-normal text-slate-500">· {{ $f->label() }}</span></h3>
+                <form method="GET" action="{{ route('dashboard') }}" class="flex flex-wrap items-center gap-1.5" x-data="{ custom: {{ $f->preset === 'custom' ? 'true' : 'false' }} }">
+                    @foreach($glance['presets'] as $k => $label)
+                        @if($k === 'custom')
+                            <button type="button" class="rounded-full border px-3 py-1 text-xs font-medium transition {{ $f->preset === 'custom' ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700' }}" data-no-loading @click="custom = !custom">{{ $label }}</button>
+                        @else
+                            <a href="{{ route('dashboard', ['preset' => $k]) }}" class="rounded-full border px-3 py-1 text-xs font-medium transition {{ $f->preset === $k ? 'border-brand-600 bg-brand-600 text-white hover:text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700' }}" data-no-loading>{{ $label }}</a>
+                        @endif
+                    @endforeach
+                    <span x-show="custom" x-cloak class="flex items-center gap-1.5">
+                        <input type="hidden" name="preset" value="custom">
+                        <input type="date" name="from" value="{{ $f->from }}" class="input w-36 py-1 text-xs" aria-label="From">
+                        <input type="date" name="to" value="{{ $f->to }}" class="input w-36 py-1 text-xs" aria-label="To">
+                        <button class="btn btn-primary btn-sm" data-no-loading>Show</button>
+                    </span>
+                </form>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="card card-body">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoiced</div>
+                    <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['total']) }}</div>
+                    <div class="text-xs text-slate-500">{{ $now['invoices'] }} invoice(s) · average {{ Money::format($now['average']) }}</div>
+                    <div class="mt-1 text-xs">{!! $chip($now['total'], $before['total']) !!}</div>
+                </div>
+                <div class="card card-body">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">After returns</div>
+                    <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['net']) }}</div>
+                    <div class="text-xs text-slate-500">{{ Money::format($now['returns']) }} given back @if((float) $now['discounts']) · {{ Money::format($now['discounts']) }} in discounts @endif</div>
+                    <div class="mt-1 text-xs">{!! $chip($now['net'], $before['net']) !!}</div>
+                </div>
+                <div class="card card-body">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Service jobs delivered</div>
+                    <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['job_value']) }}</div>
+                    <div class="text-xs text-slate-500">{{ $now['jobs'] }} job(s) handed over</div>
+                    <div class="mt-1 text-xs">{!! $chip($now['job_value'], $before['job_value']) !!}</div>
+                </div>
+                @if($withFinancials)
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Money received</div>
+                        <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['received']) }}</div>
+                        <div class="text-xs text-slate-500">of which cash {{ Money::format($now['received_cash']) }}</div>
+                        <div class="mt-1 text-xs">{!! $chip($now['received'], $before['received']) !!}</div>
+                    </div>
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Left on account</div>
+                        <div class="mt-1 text-2xl font-semibold {{ (float) $now['on_account'] > 0 ? 'text-amber-600' : 'text-slate-900' }}">{{ Money::withSymbol($now['on_account']) }}</div>
+                        <div class="text-xs text-slate-500">still unpaid on this period's invoices</div>
+                    </div>
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Purchases</div>
+                        <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['purchases']) }}</div>
+                        <div class="text-xs text-slate-500">{{ $now['purchase_count'] }} bill(s) received</div>
+                        <div class="mt-1 text-xs">{!! $chip($now['purchases'], $before['purchases']) !!}</div>
+                    </div>
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Expenses</div>
+                        <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['expenses']) }}</div>
+                        <div class="mt-1 text-xs">{!! $chip($now['expenses'], $before['expenses']) !!}</div>
+                    </div>
+                @endif
+                @if($withProfit)
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
+                        <div class="mt-1 text-2xl font-semibold {{ (float) $now['gross_profit'] < 0 ? 'text-red-600' : 'text-emerald-700' }}">{{ Money::withSymbol($now['gross_profit']) }}</div>
+                        <div class="text-xs text-slate-500">{{ $now['margin'] }}% of revenue · service {{ Money::format($now['service_profit']) }}</div>
+                        <div class="mt-1 text-xs">{!! $chip($now['gross_profit'], $before['gross_profit']) !!}</div>
+                    </div>
+                    <div class="card card-body">
+                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Net profit</div>
+                        <div class="mt-1 text-2xl font-semibold {{ (float) $now['net_profit'] < 0 ? 'text-red-600' : 'text-emerald-700' }}">{{ Money::withSymbol($now['net_profit']) }}</div>
+                        <div class="text-xs text-slate-500">after expenses and stock losses</div>
+                        <div class="mt-1 text-xs"><a href="{{ route('reports.show', ['report' => 'profit', 'preset' => 'custom', 'from' => $f->from, 'to' => $f->to]) }}">Open the profit report →</a></div>
+                    </div>
+                @endif
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+                <div class="card card-body">
+                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Sales {{ $withProfit ? 'and gross profit ' : '' }}by {{ $glance['trend']['group'] }}</div>
+                    <x-chart.bars :labels="$glance['trend']['labels']" :title="'Sales by '.$glance['trend']['group']"
+                        :series="array_values(array_filter([
+                            ['name' => 'Invoiced, after returns', 'values' => $glance['trend']['sales'], 'color' => '#c0121b'],
+                            $withProfit ? ['name' => 'Gross profit', 'values' => $glance['trend']['profit'], 'color' => '#059669'] : null,
+                        ]))"/>
+                </div>
+                <div class="card card-body">
+                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Last 12 months compared with the year before</div>
+                    <x-chart.bars :labels="$glance['year']['labels']" title="Sales over the last 12 months"
+                        :series="[['name' => 'Last 12 months', 'values' => $glance['year']['this_year'], 'color' => '#c0121b'], ['name' => 'Same months a year earlier', 'values' => $glance['year']['last_year'], 'color' => '#cbd5e1']]"/>
+                </div>
+            </div>
+
+            @if($glance['top'])
+                <div class="card card-body">
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Best sellers in this period</div>
+                    <ul class="divide-y divide-slate-100 text-sm">
+                        @foreach($glance['top'] as $t)
+                            <li class="flex items-center justify-between gap-3 py-1.5"><a href="{{ route('products.show', $t['id']) }}" class="truncate text-slate-800">{{ $t['name'] }}</a>
+                                <span class="shrink-0 text-slate-500">{{ $t['qty'] }} sold · <span class="font-medium text-slate-800">{{ Money::format($t['revenue']) }}</span></span></li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </section>
+    @endif
+
+    @if(! empty($latest))
+        <section class="mb-6 space-y-3" aria-label="Latest activity">
+            <h3 class="text-sm font-semibold text-slate-800">Latest activity</h3>
+            <div class="grid gap-4 lg:grid-cols-2">
+                @isset($latest['sales'])
+                    <div class="card card-body">
+                        <div class="flex items-center justify-between"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent sales</div><a href="{{ route('sales.index') }}" class="text-xs">See all</a></div>
+                        <ul class="mt-2 divide-y divide-slate-100 text-xs">
+                            @forelse($latest['sales'] as $s)
+                                <li class="flex items-center justify-between gap-2 py-1"><span class="min-w-0 truncate"><a href="{{ route('sales.show', $s) }}" class="font-mono font-medium">{{ $s->invoice_no }}</a> <span class="text-slate-500">{{ $s->customer->is_walk_in ? 'walk-in' : $s->customer->name }} · {{ $s->sale_date->format('d M H:i') }}</span></span><span class="shrink-0 font-medium text-slate-800">{{ Money::format($s->grand_total) }}</span></li>
+                            @empty
+                                <li class="py-3 text-slate-500">No sales yet.</li>
+                            @endforelse
+                        </ul>
+                    </div>
+                @endisset
+                @isset($latest['payments'])
+                    <div class="card card-body">
+                        <div class="flex items-center justify-between"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent payments received</div><a href="{{ route('customer-payments.index') }}" class="text-xs">See all</a></div>
+                        <ul class="mt-2 divide-y divide-slate-100 text-xs">
+                            @forelse($latest['payments'] as $p)
+                                <li class="flex items-center justify-between gap-2 py-1"><span class="min-w-0 truncate"><a href="{{ route('customer-payments.show', $p) }}" class="font-mono font-medium">{{ $p->receipt_no }}</a> <span class="text-slate-500">{{ $p->customer->is_walk_in ? 'walk-in' : $p->customer->name }} · {{ $p->method->name }}</span></span><span class="shrink-0 font-medium text-slate-800">{{ Money::format($p->amount) }}</span></li>
+                            @empty
+                                <li class="py-3 text-slate-500">No payments yet.</li>
+                            @endforelse
+                        </ul>
+                    </div>
+                @endisset
+                @isset($latest['expenses'])
+                    <div class="card card-body">
+                        <div class="flex items-center justify-between"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent expenses</div><a href="{{ route('expenses.index') }}" class="text-xs">See all</a></div>
+                        <ul class="mt-2 divide-y divide-slate-100 text-xs">
+                            @forelse($latest['expenses'] as $e)
+                                <li class="flex items-center justify-between gap-2 py-1"><span class="min-w-0 truncate"><a href="{{ route('expenses.show', $e) }}" class="font-mono font-medium">{{ $e->expense_no }}</a> <span class="text-slate-500">{{ $e->category->name }} · {{ $e->expense_date->format('d M') }}</span></span><span class="shrink-0 font-medium text-slate-800">{{ Money::format($e->amount) }}</span></li>
+                            @empty
+                                <li class="py-3 text-slate-500">No expenses yet.</li>
+                            @endforelse
+                        </ul>
+                    </div>
+                @endisset
+                @isset($latest['jobs'])
+                    <div class="card card-body">
+                        <div class="flex items-center justify-between"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent service jobs</div><a href="{{ route('service.jobs.index') }}" class="text-xs">See all</a></div>
+                        <ul class="mt-2 divide-y divide-slate-100 text-xs">
+                            @forelse($latest['jobs'] as $j)
+                                <li class="flex items-center justify-between gap-2 py-1"><span class="min-w-0 truncate"><a href="{{ route('service.jobs.show', $j) }}" class="font-mono font-medium">{{ $j->job_no }}</a> <span class="text-slate-500">{{ $j->customer->is_walk_in ? ($j->contact_name ?: 'walk-in') : $j->customer->name }}</span></span><span class="shrink-0 text-slate-600">{{ $j->statusLabel() }}</span></li>
+                            @empty
+                                <li class="py-3 text-slate-500">No jobs yet.</li>
+                            @endforelse
+                        </ul>
+                    </div>
+                @endisset
+            </div>
+        </section>
+    @endif
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         @if($stockAlerts)
             <div class="card card-body sm:col-span-2 xl:col-span-1">
@@ -81,6 +260,19 @@
                 </div>
             </div>
         @endif
+        @if($myJobs && $myJobs->isNotEmpty())
+            <div class="card card-body sm:col-span-2">
+                <div class="flex items-center justify-between"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">My open jobs</div><a href="{{ route('service.jobs.index') }}" class="text-xs">See all</a></div>
+                <ul class="mt-2 divide-y divide-slate-100 text-sm">
+                    @foreach($myJobs as $job)
+                        <li class="flex items-center justify-between gap-3 py-1.5">
+                            <span class="min-w-0"><a href="{{ route('service.jobs.show', $job) }}" class="font-mono text-xs font-medium">{{ $job->job_no }}</a> <span class="truncate text-slate-700">{{ $job->customer->is_walk_in ? ($job->contact_name ?: 'Walk-in') : $job->customer->name }}</span></span>
+                            <span class="shrink-0 text-xs {{ $job->expected_delivery_at && $job->expected_delivery_at->isPast() ? 'font-semibold text-red-600' : 'text-slate-500' }}">{{ $job->statusLabel() }}@if($job->expected_delivery_at) · due {{ $job->expected_delivery_at->format('d M') }}@endif</span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
         @if($receivables)
             <div class="card card-body">
                 <div class="flex items-center justify-between">
@@ -135,10 +327,5 @@
                 </table>
             </div>
         @endif
-
-        <div class="card card-body xl:col-span-1">
-            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Coming next</div>
-            <p class="mt-1 text-sm text-slate-600">Products, stock, suppliers, purchases, the till, sales and customers are ready. Repair and refill jobs, returns, expenses and reports follow in the next phases, and their figures will appear here.</p>
-        </div>
     </div>
 </x-layouts.app>

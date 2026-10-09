@@ -19,6 +19,7 @@
             <div class="flex flex-wrap items-center gap-2">
                 @if($sale->isVoided())<span class="badge badge-red text-sm">Cancelled</span>@elseif($sale->payment_status === 'paid')<span class="badge badge-green text-sm">Paid</span>@else<span class="badge badge-amber text-sm">{{ $sale->payment_status }}</span>@endif
                 @if(! $sale->isVoided() && (float) $sale->due_amount > 0 && ! $sale->customer->is_walk_in)@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $sale->customer_id, 'sale' => $sale->id]) }}" class="btn btn-primary btn-sm">Collect payment</a>@endcan @endif
+                @if($canReturn)<a href="{{ route('sale-returns.create', ['sale' => $sale->id]) }}" class="btn btn-secondary btn-sm">Return items</a>@endif
                 @if($canReprint)
                     <a href="{{ route('sales.reprint', [$sale, 'thermal']) }}" target="_blank" class="btn btn-secondary btn-sm">Print receipt (copy)</a>
                     <a href="{{ route('sales.reprint', [$sale, 'a4']) }}" target="_blank" class="btn btn-secondary btn-sm">Print A4 invoice (copy)</a>
@@ -102,6 +103,26 @@
                 @endif
             </div>
         </div>
+
+        @if($canSeeReturns && $sale->returns->isNotEmpty())
+            <div class="card">
+                <div class="card-header"><h2 class="card-title">Returns against this invoice</h2><span class="text-sm text-slate-500">{{ Money::format($sale->returned_amount) }} given back in total</span></div>
+                <table class="table">
+                    <thead><tr><th>Return</th><th>Date</th><th>Reason</th><th class="text-right">Value</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach($sale->returns as $r)
+                        <tr class="{{ $r->isVoided() ? 'text-slate-400' : '' }}">
+                            <td class="font-mono text-xs font-medium"><a href="{{ route('sale-returns.show', $r) }}">{{ $r->return_no }}</a></td>
+                            <td class="whitespace-nowrap">{{ $r->return_date->format('d M Y, H:i') }}</td>
+                            <td>{{ $r->reason }}</td>
+                            <td class="text-right {{ $r->isVoided() ? 'line-through' : '' }}">{{ Money::format($r->total) }}</td>
+                            <td class="text-right">@if($r->isVoided())<span class="badge badge-red">Cancelled</span>@endif</td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
 
         @if($canVoid && ! $sale->isVoided())
             <form method="POST" action="{{ route('sales.void', $sale) }}" class="card card-body space-y-3"

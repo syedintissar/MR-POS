@@ -315,3 +315,33 @@ Every route is protected by route middleware (`can:`) and again inside the actio
 | Dashboard tile | `service_jobs.view_all` or `view_assigned` ("My service jobs" for a technician) | own jobs |
 
 Cashiers receive devices, assign technicians, move jobs on, take advances and **deliver and invoice**; they cannot add parts, set charges or cancel. Technicians work on their own jobs (status, parts, charges, diagnosis) and never see money or cost.
+
+## 11. Phase 8 route map (as enforced)
+
+Every route is protected by route middleware (`can:`) and again inside the action that does the work (returns, expenses). Reports check the permission of the report in the controller and cut out the columns the person may not see. Tests: `Phase8RoleMatrixTest` runs every route against all four default roles (163 cases) plus tests of the default permission sets, of every report against cashiers and technicians, and a guest test; `ReportsTest` covers cost, profit and export visibility, `ExpenseTest`, `SaleReturnTest` and `PurchaseReturnTest` cover the pages.
+
+| Screen / action | Permission | Cashier | Technician |
+|---|---|---|---|
+| Expenses: list, one expense, its bill, the categories | `expenses.view` | yes | no |
+| Record an expense | `expenses.create` | yes | no |
+| Correct an expense (the day it was entered), manage categories | `expenses.edit` (managers) | no | no |
+| Cancel an expense (reason and password) | `expenses.void` (managers) | no | no |
+| Sales returns: list and one return | `sale_returns.view` | yes | no |
+| Take goods back | `sale_returns.create` (managers) | no | no |
+| Hand the money back (instead of store credit or taking it off the debt) | `sale_returns.refund` (managers) | no | no |
+| Cancel a sales return (reason and password) | `sales.void` (managers) | no | no |
+| Return receipt | an original opens through a signed link for ten minutes; a copy needs `sales.reprint` and `sale_returns.view` and is marked DUPLICATE and audited | copy only | no |
+| Purchase returns: list, one return, return note | `purchase_returns.view` (managers) | no | no |
+| Send goods back to a supplier | `purchase_returns.create` (managers); receiving a refund also needs `supplier_payments.create` | no | no |
+| Cancel a purchase return (reason and password) | `purchases.void` (managers) | no | no |
+| Reports hub and each report | the report's own permission: `reports.sales`, `reports.inventory`, `reports.purchases`, `reports.customers`, `reports.suppliers`, `reports.service`, `reports.expenses`, `reports.profit` (managers) | no | no |
+| Cost columns inside a report | `products.view_cost` | no | no |
+| Profit columns and the profit report | `reports.profit` | no | no |
+| Print a report | the report's own permission | no | no |
+| Export a report to PDF, Excel or CSV | `reports.export` **and** the report's permission; every export is audited | no | no |
+| Dashboard "Business at a glance" (invoiced, returns, service) and the latest sales | `sales.view_all` | no | no |
+| Dashboard money cards, latest payments and expenses | `dashboard.financials` (and `customer_payments.view` / `expenses.view` for the lists) | no | no |
+| Dashboard profit cards and chart | `reports.profit` | no | no |
+| Technician's "My open jobs" | `service_jobs.view_assigned` without `view_all` | no | yes |
+
+A role built by the administrator can hold any of these on its own: the cost and profit permissions are the three that must never reach a Cashier or Technician (`PermissionCatalogue::COST_PROFIT`).

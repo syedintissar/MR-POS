@@ -40,7 +40,7 @@ trait UsesCommittedDatabase
     /** Everything except reference data (roles, permissions, document numbering) and the migrations table. */
     protected function emptyDataTables(): void
     {
-        $keep = ['migrations', 'permissions', 'roles', 'role_has_permissions', 'document_sequences', 'units', 'categories', 'brands', 'payment_methods', 'service_types'];
+        $keep = ['migrations', 'permissions', 'roles', 'role_has_permissions', 'document_sequences', 'units', 'categories', 'brands', 'payment_methods', 'service_types', 'expense_categories'];
         $db = config('database.connections.'.config('database.default').'.database');
 
         $tables = DB::select('SELECT table_name AS t FROM information_schema.tables WHERE table_schema = ? AND table_type = "BASE TABLE"', [$db]);
