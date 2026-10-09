@@ -70,7 +70,7 @@
             <thead><tr><th>Invoice</th><th>Date</th><th class="r">Total</th><th class="r">Due</th></tr></thead>
             <tbody>
             @foreach($open as $inv)
-                <tr><td>{{ $inv->invoice_no }}</td><td>{{ $inv->sale_date->format('d M Y') }}</td><td class="r">{{ Money::format($inv->grand_total) }}</td><td class="r">{{ Money::format($inv->due_amount) }}</td></tr>
+                <tr><td>{{ $inv['no'] }}</td><td>{{ $inv['date']->format('d M Y') }}</td><td class="r">{{ Money::format($inv['total']) }}</td><td class="r">{{ Money::format($inv['due']) }}</td></tr>
             @endforeach
             </tbody>
         </table>

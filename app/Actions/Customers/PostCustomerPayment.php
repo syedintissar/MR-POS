@@ -7,7 +7,7 @@ namespace App\Actions\Customers;
 use App\Models\CustomerPayment;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
-use App\Models\SalePayment;
+use App\Models\ServiceJob;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  * Records money received from a customer (SRS CUS-04).
  *
  *  allocation 'auto'    : settles the oldest unpaid invoices first; whatever is left over stays as the customer's advance (credit)
- *  allocation 'manual'  : settles exactly the invoices (and amounts) given in `allocations` [sale_id => amount]
+ *  allocation 'manual'  : settles exactly the invoices (and amounts) given in `allocations` [sale_id => amount; "j7" => amount for a delivered service job]
  *  allocation 'advance' : settles nothing; the whole amount is kept as an advance
  *
  * All-or-nothing. The customer row is locked first, so two cashiers collecting from the same customer (or paying the same invoice) at the
@@ -88,10 +88,9 @@ class PostCustomerPayment
 
             $settled = [];
             $allocated = '0.00';
-            foreach ($plan as $saleId => [$sale, $part]) {
-                SalePayment::query()->create(['customer_payment_id' => $payment->id, 'sale_id' => $saleId, 'amount' => $part]);
-                $this->sales->refreshSale($sale);
-                $settled[] = ['invoice' => $sale->invoice_no, 'amount' => $part];
+            foreach ($plan as [$doc, $part]) {
+                $this->accounts->addAllocation($payment->id, $doc, $part);
+                $settled[] = ['invoice' => $doc instanceof Sale ? $doc->invoice_no : $doc->invoice_no.' ('.$doc->job_no.')', 'amount' => $part];
                 $allocated = Decimal::add($allocated, $part, 2);
             }
 
@@ -107,20 +106,18 @@ class PostCustomerPayment
         }, 3);
     }
 
-    /** Oldest unpaid invoices first. @return array<int, array{0: Sale, 1: string}> */
+    /** Oldest unpaid invoices and delivered jobs first. @return list<array{0: Sale|ServiceJob, 1: string}> */
     private function planAuto(int $customerId, string $amount): array
     {
         $plan = [];
         $left = $amount;
 
-        $owing = Sale::query()->where('customer_id', $customerId)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)
-            ->orderBy('sale_date')->orderBy('id')->lockForUpdate()->get();
-        foreach ($owing as $sale) {
+        foreach ($this->accounts->openDocuments($customerId, true) as $doc) {
             if (! Decimal::isPositive($left)) {
                 break;
             }
-            $part = Decimal::cmp($left, (string) $sale->due_amount) < 0 ? $left : Decimal::round((string) $sale->due_amount, 2);
-            $plan[$sale->id] = [$sale, $part];
+            $part = Decimal::cmp($left, (string) $doc->due_amount) < 0 ? $left : Decimal::round((string) $doc->due_amount, 2);
+            $plan[] = [$doc, $part];
             $left = Decimal::sub($left, $part, 2);
         }
 
@@ -128,41 +125,57 @@ class PostCustomerPayment
     }
 
     /**
-     * @param  array<int|string, string>  $allocations
-     * @return array<int, array{0: Sale, 1: string}>
+     * @param  array<int|string, string>  $allocations  "12" => amount for invoice 12, "j7" => amount for service job 7
+     * @return list<array{0: Sale|ServiceJob, 1: string}>
      */
     private function planManual(int $customerId, string $amount, array $allocations): array
     {
         $wanted = [];
-        foreach ($allocations as $saleId => $part) {
+        foreach ($allocations as $key => $part) {
             $part = Decimal::round((string) $part, 2);
             if (Decimal::isNegative($part)) {
                 throw new DomainException('An invoice cannot be paid a negative amount.');
             }
             if (Decimal::isPositive($part)) {
-                $wanted[(int) $saleId] = $part;
+                $wanted[(string) $key] = $part;
             }
         }
         if ($wanted === []) {
             throw new DomainException('Enter how much of the payment goes to which invoice, or choose "keep as advance".');
         }
 
-        $sales = Sale::query()->whereIn('id', array_keys($wanted))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $saleIds = [];
+        $jobIds = [];
+        foreach (array_keys($wanted) as $key) {
+            $key = (string) $key;
+            if (preg_match('/^j(\d+)$/', $key, $m)) {
+                $jobIds[] = (int) $m[1];
+            } elseif (ctype_digit($key)) {
+                $saleIds[] = (int) $key;
+            } else {
+                throw new DomainException('One of the invoices is not valid.');
+            }
+        }
+        $sales = Sale::query()->whereIn('id', $saleIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $jobs = ServiceJob::query()->whereIn('id', $jobIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
 
         $plan = [];
         $total = '0.00';
-        foreach ($wanted as $saleId => $part) {
-            $sale = $sales[$saleId] ?? null;
-            if (! $sale || $sale->customer_id !== $customerId) {
+        foreach ($wanted as $key => $part) {
+            $key = (string) $key;
+            $isJob = $key[0] === 'j';
+            $doc = $isJob ? ($jobs[(int) substr($key, 1)] ?? null) : ($sales[(int) $key] ?? null);
+            if (! $doc || $doc->customer_id !== $customerId) {
                 throw new DomainException('One of the invoices does not belong to this customer.');
             }
-            if ($sale->isVoided()) {
-                throw new DomainException("{$sale->invoice_no} has been cancelled.");
+            $no = $isJob ? $doc->invoice_no : $doc->invoice_no;
+            if ($isJob ? $doc->status !== ServiceJob::DELIVERED : $doc->isVoided()) {
+                throw new DomainException($isJob ? "Service job {$doc->job_no} has not been invoiced (or was cancelled), so it cannot be paid here." : "{$no} has been cancelled.");
             }
-            if (Decimal::cmp($part, (string) $sale->due_amount) > 0) {
-                throw new DomainException("{$sale->invoice_no} has only {$sale->due_amount} left to pay, not {$part}.");
+            if (Decimal::cmp($part, (string) $doc->due_amount) > 0) {
+                throw new DomainException(($isJob ? $no : $no)." has only {$doc->due_amount} left to pay, not {$part}.");
             }
-            $plan[$saleId] = [$sale, $part];
+            $plan[] = [$doc, $part];
             $total = Decimal::add($total, $part, 2);
         }
 

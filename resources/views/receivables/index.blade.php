@@ -46,7 +46,7 @@
                 @if($detail)
                     @foreach($row['invoices'] as $inv)
                         <tr class="bg-slate-50 text-xs text-slate-600">
-                            <td class="pl-8"><a href="{{ route('sales.show', $inv['id']) }}" class="font-mono">{{ $inv['invoice_no'] }}</a> · {{ \Illuminate\Support\Carbon::parse($inv['date'])->format('d M Y') }}</td>
+                            <td class="pl-8"><a href="{{ $inv['url'] }}" class="font-mono">{{ $inv['invoice_no'] }}</a> · {{ \Illuminate\Support\Carbon::parse($inv['date'])->format('d M Y') }}</td>
                             <td colspan="{{ count($buckets) }}" class="text-right">{{ $inv['age'] }} day(s) old · total {{ Money::format($inv['total']) }} · paid {{ Money::format($inv['paid']) }}</td>
                             <td class="text-right font-medium">{{ Money::format($inv['due']) }}</td><td></td><td></td>
                         </tr>

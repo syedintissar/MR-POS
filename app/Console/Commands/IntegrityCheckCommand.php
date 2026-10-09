@@ -9,6 +9,7 @@ use App\Services\Customers\CustomerAccountService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Purchasing\SupplierAccountService;
 use App\Services\Sales\SaleAccountService;
+use App\Services\Service\ServiceJobService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -20,9 +21,9 @@ class IntegrityCheckCommand extends Command
 {
     protected $signature = 'pos:integrity:check';
 
-    protected $description = 'Check that cached totals (stock, supplier and customer balances, bill, invoice and customer payments) agree with their ledgers. Exit code 1 if anything is off.';
+    protected $description = 'Check that cached totals (stock, supplier and customer balances, bill, invoice, service job and customer payments) agree with their ledgers. Exit code 1 if anything is off.';
 
-    public function handle(InventoryService $inventory, SupplierAccountService $suppliers, SaleAccountService $sales, CustomerAccountService $customers, AuditLogger $audit): int
+    public function handle(InventoryService $inventory, SupplierAccountService $suppliers, SaleAccountService $sales, CustomerAccountService $customers, ServiceJobService $serviceJobs, AuditLogger $audit): int
     {
         $problems = [];
 
@@ -45,7 +46,12 @@ class IntegrityCheckCommand extends Command
             $problems[] = $message;
         }
 
-        // Later phases add their checks here (returns, service jobs ...).
+        // Service jobs: figures agree with their lines and payments, the status with the history, parts with the stock ledger, invoices with the account.
+        foreach ($serviceJobs->findDrift() as $message) {
+            $problems[] = $message;
+        }
+
+        // Later phases add their checks here (returns, expenses ...).
 
         Cache::forever('integrity.last', ['ran_at' => now()->toDateTimeString(), 'problems' => array_slice($problems, 0, 20), 'total' => count($problems)]);
 
@@ -58,7 +64,7 @@ class IntegrityCheckCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments and invoices all agree with their ledgers.');
+        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments, invoices and service jobs all agree with their ledgers.');
 
         return self::SUCCESS;
     }

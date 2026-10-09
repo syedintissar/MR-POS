@@ -2,7 +2,7 @@
 
 A local-first POS, inventory, accounting, service/repair and shop management system. It is a Laravel 13 web app that runs on the shop's Windows server PC (Apache + PHP + MariaDB 11.4) and is used from browsers on the shop network. Normal operation never needs the internet.
 
-**Current status:** Phase 6 (customers and receivables) complete and awaiting owner approval. Phases 1-5 are committed. Built so far: login and security, users, roles and permissions, settings, audit trail, document numbering, backup / restore, products, categories, brands, units, suppliers, stock ledger and adjustments, Excel/CSV import, barcode labels, purchases with landed cost and average cost, supplier payments, supplier accounts and statements, payment methods, and **the till: barcode POS, split payments with change, manager approval, held carts, 80 mm receipts, A4 invoices and PDFs, sales history and cancelling**. Phase 6 added **customers: credit sales up to a limit, customer payments (oldest invoice first or chosen invoices), customer credit, statements and "who owes us" aging**. Repair jobs, returns and reports follow in Phases 7-8.
+**Current status:** Phase 7 (service, repair and refill jobs) complete and awaiting owner approval. Phases 1-6 are committed. Built so far: login and security, users, roles and permissions, settings, audit trail, document numbering, backup / restore, products, categories, brands, units, suppliers, stock ledger and adjustments, Excel/CSV import, barcode labels, purchases with landed cost and average cost, supplier payments, supplier accounts and statements, payment methods, and **the till: barcode POS, split payments with change, manager approval, held carts, 80 mm receipts, A4 invoices and PDFs, sales history and cancelling**. Phase 6 added **customers: credit sales up to a limit, customer payments (oldest invoice first or chosen invoices), customer credit, statements and "who owes us" aging**. Phase 7 added **service, repair and refill jobs: device intake with a printed slip, technician assignment and a status flow, parts taken from stock, advances, delivery with an invoice, cancellation, and what is left on account**. Returns, expenses and reports follow in Phase 8.
 
 ## Quick start (developer / first install)
 ```powershell
@@ -34,5 +34,6 @@ Full instructions: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 | [docs/PHASE4_REPORT.md](docs/PHASE4_REPORT.md) | Phase 4 summary for the owner |
 | [docs/PHASE5_REPORT.md](docs/PHASE5_REPORT.md) | Phase 5 summary for the owner |
 | [docs/PHASE6_REPORT.md](docs/PHASE6_REPORT.md) | Phase 6 summary for the owner |
+| [docs/PHASE7_REPORT.md](docs/PHASE7_REPORT.md) | Phase 7 summary for the owner |
 
 Windows helper scripts (Administrator PowerShell where noted) are in [deploy/windows](deploy/windows).

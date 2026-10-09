@@ -13,6 +13,8 @@ use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Models\ServiceJob;
+use App\Models\ServiceType;
 use App\Models\Setting;
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
@@ -66,6 +68,8 @@ class AppServiceProvider extends ServiceProvider
             'customer' => Customer::class,
             'customer_payment' => CustomerPayment::class,
             'held_sale' => HeldSale::class,
+            'service_job' => ServiceJob::class,
+            'service_type' => ServiceType::class,
         ]);
 
         $this->applySessionTimeout();

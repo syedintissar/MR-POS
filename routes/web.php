@@ -21,6 +21,9 @@ use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\ServiceJobController;
+use App\Http\Controllers\ServiceJobWorkController;
+use App\Http\Controllers\ServiceTypeController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierPaymentController;
@@ -167,6 +170,51 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('receivables', [ReceivablesController::class, 'index'])->middleware('can:reports.customers')->name('receivables.index');
+
+    // ---- Phase 7: service, repair and refill jobs --------------------------------------------------------------
+    // The routes check the permission; the controllers and actions also check that the person may see THAT job (a technician only sees their own).
+
+    Route::prefix('service')->name('service.')->group(function () {
+        Route::get('products/search', [ServiceJobController::class, 'productSearch'])->middleware('can:service_jobs.manage_parts')->name('products.search');
+        Route::get('customers/search', [ServiceJobController::class, 'customerSearch'])->middleware('can:service_jobs.create')->name('customers.search');
+
+        Route::prefix('jobs')->name('jobs.')->group(function () {
+            Route::get('/', [ServiceJobController::class, 'index'])->name('index');
+            Route::middleware('can:service_jobs.create')->group(function () {
+                Route::get('create', [ServiceJobController::class, 'create'])->name('create');
+                Route::post('/', [ServiceJobController::class, 'store'])->name('store');
+            });
+            Route::get('{job}', [ServiceJobController::class, 'show'])->whereNumber('job')->name('show');
+            Route::get('{job}/edit', [ServiceJobController::class, 'edit'])->whereNumber('job')->middleware('can:service_jobs.edit')->name('edit');
+            Route::put('{job}', [ServiceJobController::class, 'updateJob'])->whereNumber('job')->middleware('can:service_jobs.edit')->name('update');
+            Route::post('{job}/assign', [ServiceJobController::class, 'assignTechnician'])->whereNumber('job')->middleware('can:service_jobs.assign')->name('assign');
+            Route::post('{job}/status', [ServiceJobController::class, 'changeStatus'])->whereNumber('job')->middleware('can:service_jobs.change_status')->name('status');
+
+            Route::post('{job}/parts', [ServiceJobWorkController::class, 'addPart'])->whereNumber('job')->middleware('can:service_jobs.manage_parts')->name('parts.add');
+            Route::post('{job}/charges', [ServiceJobWorkController::class, 'addCharge'])->whereNumber('job')->middleware('can:service_jobs.set_charges')->name('charges.add');
+            Route::post('{job}/pricing', [ServiceJobWorkController::class, 'updatePricing'])->whereNumber('job')->middleware('can:service_jobs.set_charges')->name('pricing');
+            Route::post('{job}/lines/{item}/remove', [ServiceJobWorkController::class, 'removeLine'])->whereNumber(['job', 'item'])->name('lines.remove');   // the controller checks manage_parts (a part) or set_charges (a charge)
+            Route::post('{job}/advance', [ServiceJobWorkController::class, 'takeAdvance'])->whereNumber('job')->middleware('can:customer_payments.create')->name('advance');
+            Route::post('{job}/deliver', [ServiceJobWorkController::class, 'deliver'])->whereNumber('job')->middleware('can:service_jobs.deliver')->name('deliver');
+            Route::post('{job}/cancel', [ServiceJobWorkController::class, 'cancelJob'])->whereNumber('job')->middleware('can:service_jobs.cancel')->name('cancel');
+
+            // the original slip / invoice open through a signed link (ten minutes); later prints are reprints, marked DUPLICATE and recorded
+            Route::get('{job}/slip/{format}', [ServiceJobController::class, 'slip'])->whereNumber('job')->middleware('signed')->name('slip');
+            Route::get('{job}/slip/{format}/reprint', [ServiceJobController::class, 'reprintSlip'])->whereNumber('job')->name('slip.reprint');
+            Route::get('{job}/invoice/{format}', [ServiceJobController::class, 'invoice'])->whereNumber('job')->middleware('signed')->name('invoice');
+            Route::get('{job}/invoice/{format}/reprint', [ServiceJobController::class, 'reprintInvoice'])->whereNumber('job')->name('invoice.reprint');
+            Route::get('{job}/invoice.pdf', [ServiceJobController::class, 'invoicePdf'])->whereNumber('job')->name('invoice.pdf');
+        });
+
+        Route::middleware('can:service_types.manage')->prefix('types')->name('types.')->group(function () {
+            Route::get('/', [ServiceTypeController::class, 'index'])->name('index');
+            Route::get('create', [ServiceTypeController::class, 'create'])->name('create');
+            Route::post('/', [ServiceTypeController::class, 'store'])->name('store');
+            Route::get('{type}/edit', [ServiceTypeController::class, 'edit'])->whereNumber('type')->name('edit');
+            Route::put('{type}', [ServiceTypeController::class, 'update'])->whereNumber('type')->name('update');
+            Route::post('{type}/toggle', [ServiceTypeController::class, 'toggle'])->whereNumber('type')->name('toggle');
+        });
+    });
 
     // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------
 

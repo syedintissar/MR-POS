@@ -9,8 +9,10 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Models\ServiceJob;
 use App\Models\Supplier;
 use App\Services\Backup\BackupHealth;
+use App\Services\Service\ServiceJobAccess;
 use App\Services\SettingsService;
 use App\Services\SystemCheck;
 use Illuminate\Http\Request;
@@ -75,7 +77,20 @@ class DashboardController extends Controller
             ];
         }
 
+        // Service jobs: everybody who may see jobs sees the figures for the jobs they may see (technicians: their own).
+        $service = null;
+        if ($user->canAny(['service_jobs.view_all', 'service_jobs.view_assigned'])) {
+            $jobs = fn () => ServiceJobAccess::visibleTo($user);
+            $service = [
+                'open' => $jobs()->open()->count(),
+                'ready' => $jobs()->where('status', ServiceJob::COMPLETED)->count(),
+                'overdue' => $jobs()->open()->where('status', '<>', ServiceJob::COMPLETED)->whereNotNull('expected_delivery_at')->where('expected_delivery_at', '<', now())->count(),
+                'own' => ! $user->can('service_jobs.view_all'),
+            ];
+        }
+
         return view('dashboard', [
+            'service' => $service,
             'stockAlerts' => $stockAlerts,
             'payables' => $payables,
             'receivables' => $receivables,

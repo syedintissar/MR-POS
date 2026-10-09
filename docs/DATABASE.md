@@ -753,7 +753,7 @@ This table is the contract the Action classes and their tests implement. "Ledger
 | Supplier payment | supplier_payments, purchase_payments | – | – | Dr amount | – |
 | Purchase return | purchase_returns, items | `purchase_return` −qty | – | Dr total; if refund received: Cr refund + supplier_payments `refund` | |
 | Add service part | service_job_items | `service_consumption` −qty | – | – | – |
-| Remove service part | item.status=removed | `service_return` +qty, or none if written off (then an adjustment_out document is created) | – | – | – |
+| Remove service part | item.status=removed | `service_return` +qty at the cost it left at, or **none if written off** (the part already left the stock when it was added; an `adjustment_out` as well would take it out twice: see §13) | – | – | – |
 | Service advance / payment | customer_payments, service_job_payments | – | Cr amount | – | – |
 | Deliver service job | service_jobs invoice_no, delivered_at | – | Dr grand_total (`service_invoice`) | – | final payment as above |
 | Stock adjustment | stock_adjustments, items | `adjustment_in/out` | – | – | – |
@@ -1000,3 +1000,46 @@ MariaDB's default isolation (REPEATABLE READ) fixes a transaction's *snapshot* a
 11. Every customer's `balance` equals the sum of their ledger lines.
 12. Every invoice of a named customer is on the account exactly once (and reversed exactly once if cancelled; never reversed while completed).
 13. Every receipt from a named customer is on the account exactly once (and reversed exactly once if cancelled).
+
+## 13. Phase 7 implementation notes (service, repair and refill jobs)
+
+Migration `2026_10_09_600000_create_service_tables` (additive: no existing table lost data; applied to the real `mrpos` database after a backup).
+
+| Item | As built | Why |
+|---|---|---|
+| `service_types` | name (unique), optional `default_charge`, active flag, order. The 11 types of SRV-01 are created by the migration and by `ServiceTypeSeeder` (safe to run again) | A type that has been used can be switched off, not deleted |
+| `service_jobs` | As §2.7, plus `contact_name` (the walk-in customer has no name of its own), `approved_amount` and `approved_by`, `delivered_by`, `cancelled_by`, `tax_inclusive` (snapshot of the setting when the job was received). `CHECK`s: status list, priority / device / payment-status / approval-method lists, non-negative amounts, and **"delivered exactly when it has an invoice number, delivery time and invoice time; cancelled exactly when it has a cancel time"** (no half-finished states). `job_no` and `invoice_no` are unique | A delivered or cancelled job is locked by the database too, not only by the program |
+| `service_job_items` | `part` lines carry a product, `charge` lines do not (`CHECK`); quantity, billed price, **unit cost snapshot** (the average cost when the part was taken), line discount, tax rate, `line_total` (quantity × price − discount); status `active` / `removed` with who, when, disposition (`returned_to_stock` / `written_off`) and reason. Lines are never deleted | The cost stays on the line for the profit figures; a removed line is history |
+| `service_status_history` | Append-only (triggers `service_history_no_update` / `_no_delete`): from, to, note, who, when (microseconds) | SRV-03: every move is traceable and cannot be rewritten |
+| `service_job_payments` | Allocation of a receipt to a job (`UNIQUE(customer_payment_id, service_job_id)`, amount > 0): advances while the job is open and the payment at delivery | A job is paid through the same numbered receipts as an invoice |
+| `customer_payments.refund_of_id` | A refund (money handed back) says which receipt it returns | The customer's credit stays exact: free credit = receipt − what invoices and jobs use − what was refunded |
+
+### Posting rules as implemented
+| Operation (action) | Stock | Customer ledger | Receipts / allocations | Other |
+|---|---|---|---|---|
+| Receive a device (`ReceiveServiceJob`) | none | none | none (an advance is a separate step) | job number `JOB-`, history line "Received", the type's suggested charge as the first line |
+| Add a part (`AddServicePart`) | `service_consumption` −qty at the **current average cost** (cost written on the line) | none | none | job totals recomputed; only from "diagnosing" to "completed" |
+| Take a part off (`RemoveServiceLine`) | `service_return` +qty at the cost it left at, or **no movement** when written off | none | none | write-off needs a reason; the cost stays on the line |
+| Charge, estimate, discount (`AddServiceCharge`, `UpdateServicePricing`) | none | none | none | totals recomputed with `SaleCalculator` (tax per settings, no round-off) |
+| Advance (`TakeServiceAdvance`) | none | `payment` credit (named customers) | one receipt (`RCP-`) + allocation to the job | never more than the job is worth; the walk-in customer has no ledger |
+| Deliver and invoice (`DeliverServiceJob`) | none | `service_invoice` debit for the job total, then `payment` credits for what is paid now | one receipt + allocation per payment line; "Customer credit" allocates earlier credit (no ledger line) | invoice number `SRV-`; unpaid stays on the account (named customers only, within the limit); extra advance is returned (walk-in) or stays as credit (named); the job is locked |
+| Cancel (`CancelServiceJob`) | `service_return` for each part (or none if written off) | none; if the advance is handed back: `refund` debit | allocations stop counting, so the advance becomes the customer's credit; or a `refund` payment is written | reason required; only from the states the state machine allows (a completed job is reopened first) |
+| Collect a payment / apply an advance / cancel a payment (Phase 6 actions) | none | as in §12 | now settle **invoices and delivered jobs together**, oldest first; keys `12` (invoice) and `j7` (job) | the aging report, statement and customer page list both |
+
+### Lock order and the "first read" rule
+Job flows: **idempotency / customer (named) → job → job lines → products (by id) → number sequences → audit last.** Delivery, advance and cancel read who the customer is *before* the transaction starts, so the customer lock is the first read of the transaction (DATABASE §12). Parts and status changes touch no account, so they lock only the job and the products. Every action re-reads the job `FOR UPDATE` and judges the **stored** status, not what the screen showed.
+
+### The state machine
+`received → inspection_pending → diagnosing → waiting_for_approval → approved → in_progress ⇄ waiting_for_parts → completed → delivered`, and `cancelled` from any state before "completed". Enforced by `ServiceJob::TRANSITIONS`; a test tries **every pair of statuses** against it. `approved` needs how the customer approved (in person / phone / WhatsApp) and stores the approved estimate; reopening a completed job needs a reason.
+
+### Who sees which job
+`service_jobs.view_all` (cashier, manager, administrator) sees every job; `service_jobs.view_assigned` only (technician) sees and may work on only the jobs assigned to them (`ServiceJobAccess`). Cost (`unit_cost`, parts cost) is shown only with `products.view_cost`; paid / due and the payments only with `customer_payments.view`.
+
+### Integrity checks added (`pos:integrity:check`, twice a day)
+14. Every job's charges, parts, parts cost, tax and total equal what its lines (that stand) come to.
+15. Every job's paid / due / status equal what its posted receipts imply (a cancelled job shows 0 and 0).
+16. The status a job shows is the last line of its history.
+17. For every job and product, what left the stock (consumption minus returns) equals the part lines that stand plus those written off.
+18. A delivered job of a named customer is on the account exactly once (and nothing else is).
+19. A receipt is never used for more than its amount, counting invoices that stand, jobs that stand and refunds (replaces the check of §11 item 9).
+20. Every refund handed to a named customer is on the account exactly once.

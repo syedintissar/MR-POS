@@ -69,7 +69,30 @@ On a customer's page, **Print statement** (or **PDF**) shows every sale and paym
 
 ### Who can see what
 Cashiers see balances and can collect money; only managers cancel a payment. Technicians can find a customer but never see any money.
-## 4. Repair, service & refill jobs [Phase 7]
+## 4. Repair, service & refill jobs
+
+### Receiving a device
+**Service → Service jobs → Receive a device.** Find the customer (name, phone or code) or leave it empty for a **walk-in customer** (then type their name and phone number: the shop needs it to call). Choose the **type of service** and what the device is, then the brand, model, serial number, the problem the customer reported and what came with it (cable, tray…). Add the **promised date**, mark it **urgent** if it is, and choose the **technician**. If the service has a usual charge (for example a toner refill) it is added to the job when the box is ticked. You can take an **advance** at the same time. When you press **Receive the device** the job gets a number (JOB-000001…) and the **slip** prints, with a barcode and the shop's terms. Give the slip to the customer.
+
+### Finding a job
+**Service → Service jobs.** The tabs show **Open**, **Ready to collect** (completed, waiting for the customer), **Overdue**, **Delivered** and **Cancelled**. Type a job number, a name, a phone number, a serial number or a model in the box. Scan or type the number from a slip and press Enter: the job opens.
+
+### Working on a job
+Open a job to see the card, the lines, the money, the history and the actions. A **technician** sees only the jobs assigned to them, and never any money.
+- **Move the job on** with *Change status*: Received → Inspection pending → Diagnosing → Waiting for approval → Approved → In progress ⇄ Waiting for parts → Completed. A refill can go straight from Diagnosing to In progress. When the customer approves the estimate, choose how (in person, by phone, WhatsApp). A completed job can be reopened with a reason. Every move is written in the history.
+- **Parts:** from Diagnosing onwards, search the stock and **Add part**: it leaves the stock at once and is billed at the product's price. **Remove** puts it back in stock, or **write it off** (with a reason) if it cannot be reused.
+- **Charges, estimate, discount:** add labour or refill charges, type the estimate you gave the customer and any discount on the whole job (technicians and managers).
+- **Advance:** *Take an advance* any time the job is open; it is a numbered receipt and shows on the job. It can never be more than the job is worth.
+- **WhatsApp** opens a message to the customer ("your job is ready…"); it needs the internet only at the moment you click.
+
+### Delivering and invoicing
+When the job is **Completed**, open it and use **Deliver and invoice**. The form starts with what is still to pay in cash; split it over several methods if needed, or use the customer's credit. If the customer hands over more cash, the screen shows the **change to give**. A named customer who is allowed credit can leave part unpaid (it stays on their account, and you can collect it later from *Customers → Collect a payment*); the **walk-in customer pays in full**. Delivering gives the job its **service invoice number** (SRV-000001…), prints the invoice and **locks the job**. Invoices can be reprinted (marked DUPLICATE) or saved as a PDF.
+
+### Cancelling
+A manager opens the job and uses **Cancel this job…** (not possible once it is completed: reopen it first). Give the reason, say for each part whether it goes **back to stock** or is **written off**, and for money the customer paid in advance whether to **keep it as their credit** or **hand it back** (a walk-in customer always gets it back). Nothing is deleted.
+
+### Service types
+**Service → Service types** (managers): add a type, give it a usual charge, switch it off when you stop offering it.
 ## 5. Products & stock
 
 ### Finding a product

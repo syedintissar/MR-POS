@@ -6,6 +6,7 @@ namespace App\Actions\Customers;
 
 use App\Models\Customer;
 use App\Models\Sale;
+use App\Models\ServiceJob;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
@@ -49,10 +50,9 @@ class AllocateCustomerAdvance
             }
 
             $applied = [];
-            foreach ($plan as [$sale, $part]) {
-                $this->accounts->allocateAdvance($c->id, $sale, $part);
-                $this->sales->refreshSale($sale);
-                $applied[] = ['invoice' => $sale->invoice_no, 'amount' => $part];
+            foreach ($plan as [$doc, $part]) {
+                $this->accounts->allocateAdvance($c->id, $doc, $part);   // also refreshes the invoice or job
+                $applied[] = ['invoice' => $doc instanceof Sale ? $doc->invoice_no : $doc->invoice_no.' ('.$doc->job_no.')', 'amount' => $part];
             }
 
             $total = array_reduce($applied, fn ($carry, $a) => Decimal::add($carry, $a['amount'], 2), '0.00');
@@ -64,17 +64,17 @@ class AllocateCustomerAdvance
         }, 3);
     }
 
-    /** @return list<array{0: Sale, 1: string}> */
+    /** @return list<array{0: Sale|ServiceJob, 1: string}> */
     private function auto(int $customerId, string $advance): array
     {
         $plan = [];
         $left = $advance;
-        foreach (Sale::query()->where('customer_id', $customerId)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)->orderBy('sale_date')->orderBy('id')->lockForUpdate()->get() as $sale) {
+        foreach ($this->accounts->openDocuments($customerId, true) as $doc) {
             if (! Decimal::isPositive($left)) {
                 break;
             }
-            $part = Decimal::cmp($left, (string) $sale->due_amount) < 0 ? $left : Decimal::round((string) $sale->due_amount, 2);
-            $plan[] = [$sale, $part];
+            $part = Decimal::cmp($left, (string) $doc->due_amount) < 0 ? $left : Decimal::round((string) $doc->due_amount, 2);
+            $plan[] = [$doc, $part];
             $left = Decimal::sub($left, $part, 2);
         }
 
@@ -82,19 +82,19 @@ class AllocateCustomerAdvance
     }
 
     /**
-     * @param  array<int|string, string>  $allocations
-     * @return list<array{0: Sale, 1: string}>
+     * @param  array<int|string, string>  $allocations  "12" => amount for invoice 12, "j7" => amount for service job 7
+     * @return list<array{0: Sale|ServiceJob, 1: string}>
      */
     private function manual(int $customerId, string $advance, array $allocations): array
     {
         $wanted = [];
-        foreach ($allocations as $saleId => $part) {
+        foreach ($allocations as $key => $part) {
             $part = Decimal::round((string) $part, 2);
             if (Decimal::isNegative($part)) {
                 throw new DomainException('An invoice cannot be paid a negative amount.');
             }
             if (Decimal::isPositive($part)) {
-                $wanted[(int) $saleId] = $part;
+                $wanted[(string) $key] = $part;
             }
         }
         $total = array_reduce($wanted, fn ($c, $p) => Decimal::add($c, $p, 2), '0.00');
@@ -102,20 +102,36 @@ class AllocateCustomerAdvance
             throw new DomainException("Only {$advance} of advance is available, not {$total}.");
         }
 
-        $sales = Sale::query()->whereIn('id', array_keys($wanted))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $saleIds = [];
+        $jobIds = [];
+        foreach (array_keys($wanted) as $key) {
+            $key = (string) $key;
+            if (preg_match('/^j(\d+)$/', $key, $m)) {
+                $jobIds[] = (int) $m[1];
+            } elseif (ctype_digit($key)) {
+                $saleIds[] = (int) $key;
+            } else {
+                throw new DomainException('One of the invoices is not valid.');
+            }
+        }
+        $sales = Sale::query()->whereIn('id', $saleIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $jobs = ServiceJob::query()->whereIn('id', $jobIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+
         $plan = [];
-        foreach ($wanted as $saleId => $part) {
-            $sale = $sales[$saleId] ?? null;
-            if (! $sale || $sale->customer_id !== $customerId) {
+        foreach ($wanted as $key => $part) {
+            $key = (string) $key;
+            $isJob = $key[0] === 'j';
+            $doc = $isJob ? ($jobs[(int) substr($key, 1)] ?? null) : ($sales[(int) $key] ?? null);
+            if (! $doc || $doc->customer_id !== $customerId) {
                 throw new DomainException('One of the invoices does not belong to this customer.');
             }
-            if ($sale->isVoided()) {
-                throw new DomainException("{$sale->invoice_no} has been cancelled.");
+            if ($isJob ? $doc->status !== ServiceJob::DELIVERED : $doc->isVoided()) {
+                throw new DomainException($isJob ? "Service job {$doc->job_no} has not been invoiced (or was cancelled), so it cannot be paid here." : "{$doc->invoice_no} has been cancelled.");
             }
-            if (Decimal::cmp($part, (string) $sale->due_amount) > 0) {
-                throw new DomainException("{$sale->invoice_no} has only {$sale->due_amount} left to pay, not {$part}.");
+            if (Decimal::cmp($part, (string) $doc->due_amount) > 0) {
+                throw new DomainException("{$doc->invoice_no} has only {$doc->due_amount} left to pay, not {$part}.");
             }
-            $plan[] = [$sale, $part];
+            $plan[] = [$doc, $part];
         }
 
         return $plan;

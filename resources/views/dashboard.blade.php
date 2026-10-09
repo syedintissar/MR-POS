@@ -68,6 +68,19 @@
                 <div class="text-xs text-slate-500">{{ $payables['suppliers'] }} supplier(s) · {{ $payables['open_bills'] }} open bill(s)@if($payables['drafts']) · {{ $payables['drafts'] }} draft(s) not received yet @endif</div>
             </div>
         @endif
+        @if($service)
+            <div class="card card-body">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $service['own'] ? 'My service jobs' : 'Service jobs' }}</div>
+                    <a href="{{ route('service.jobs.index') }}" class="text-xs">See all</a>
+                </div>
+                <div class="mt-1 text-2xl font-semibold text-slate-900">{{ $service['open'] }} <span class="text-sm font-normal text-slate-500">open</span></div>
+                <div class="text-xs text-slate-500">
+                    <a href="{{ route('service.jobs.index', ['view' => 'ready']) }}">{{ $service['ready'] }} ready to collect</a> ·
+                    <a href="{{ route('service.jobs.index', ['view' => 'overdue']) }}" class="{{ $service['overdue'] ? 'font-semibold text-red-600' : '' }}">{{ $service['overdue'] }} overdue</a>
+                </div>
+            </div>
+        @endif
         @if($receivables)
             <div class="card card-body">
                 <div class="flex items-center justify-between">

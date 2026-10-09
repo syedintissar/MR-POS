@@ -61,14 +61,14 @@
                     <table class="table">
                         <thead><tr><th>Invoice</th><th>Date</th><th class="text-right">Total</th><th class="text-right">Paid</th><th class="text-right">Due</th><th class="text-right">Age</th><th></th></tr></thead>
                         <tbody>
-                        @foreach($open as $s)
+                        @foreach($open as $o)
                             <tr>
-                                <td class="font-mono text-xs font-medium"><a href="{{ route('sales.show', $s) }}">{{ $s->invoice_no }}</a></td>
-                                <td class="whitespace-nowrap">{{ $s->sale_date->format('d M Y') }}</td>
-                                <td class="text-right">{{ Money::format($s->grand_total) }}</td><td class="text-right text-slate-500">{{ Money::format($s->paid_amount) }}</td>
-                                <td class="text-right font-medium text-amber-700">{{ Money::format($s->due_amount) }}</td>
-                                <td class="text-right text-slate-500">{{ (int) $s->sale_date->copy()->startOfDay()->diffInDays(now()->startOfDay(), true) }} d</td>
-                                <td class="text-right">@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $customer->id, 'sale' => $s->id]) }}" class="btn btn-secondary btn-sm">Pay</a>@endcan</td>
+                                <td class="font-mono text-xs font-medium"><a href="{{ $o['url'] }}">{{ $o['no'] }}</a>@if($o['kind'] === 'job') <span class="badge badge-gray">service</span>@endif</td>
+                                <td class="whitespace-nowrap">{{ $o['date']->format('d M Y') }}</td>
+                                <td class="text-right">{{ Money::format($o['total']) }}</td><td class="text-right text-slate-500">{{ Money::format($o['paid']) }}</td>
+                                <td class="text-right font-medium text-amber-700">{{ Money::format($o['due']) }}</td>
+                                <td class="text-right text-slate-500">{{ (int) $o['date']->copy()->startOfDay()->diffInDays(now()->startOfDay(), true) }} d</td>
+                                <td class="text-right">@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $customer->id, $o['kind'] === 'job' ? 'job' : 'sale' => $o['id']]) }}" class="btn btn-secondary btn-sm">Pay</a>@endcan</td>
                             </tr>
                         @endforeach
                         </tbody>
@@ -164,6 +164,27 @@
                     </form>
                 </details>
             @endcan
+        @endif
+
+        @if(isset($recentJobs) && $recentJobs->isNotEmpty())
+            <div class="card overflow-x-auto">
+                <div class="card-header"><h2 class="card-title">Service jobs</h2><a href="{{ route('service.jobs.index', ['q' => $customer->name, 'view' => 'all']) }}" class="text-xs">See all</a></div>
+                <table class="table">
+                    <thead><tr><th>Job</th><th>Received</th><th>Service</th><th>Device</th><th>Status</th><th class="text-right">Total</th></tr></thead>
+                    <tbody>
+                    @foreach($recentJobs as $j)
+                        <tr>
+                            <td class="font-mono text-xs font-medium"><a href="{{ route('service.jobs.show', $j) }}">{{ $j->job_no }}</a></td>
+                            <td class="whitespace-nowrap">{{ $j->received_at->format('d M Y') }}</td>
+                            <td>{{ $j->serviceType->name }}</td>
+                            <td>{{ collect([$j->model, $j->serial_number])->filter()->implode(' · ') ?: '—' }}</td>
+                            <td>{{ $j->statusLabel() }}</td>
+                            <td class="text-right">{{ (float) $j->grand_total ? Money::format($j->grand_total) : '—' }}</td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
         @endif
 
         <div class="flex flex-wrap items-center justify-between gap-2">

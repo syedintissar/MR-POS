@@ -7,11 +7,18 @@ namespace App\Services\Customers;
 use App\Models\Customer;
 use App\Models\CustomerLedgerEntry;
 use App\Models\CustomerPayment;
+use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Models\SalePayment;
+use App\Models\ServiceJob;
+use App\Models\ServiceJobPayment;
 use App\Models\User;
+use App\Services\DocumentNumberService;
+use App\Services\Sales\SaleAccountService;
+use App\Services\Service\ServiceJobService;
 use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
@@ -107,7 +114,13 @@ class CustomerAccountService
         $rows = DB::select(
             "SELECT cp.id, cp.amount - COALESCE((
                         SELECT SUM(sp.amount) FROM sale_payments sp JOIN sales s ON s.id = sp.sale_id
-                         WHERE sp.customer_payment_id = cp.id AND s.status <> 'voided'), 0) AS free
+                         WHERE sp.customer_payment_id = cp.id AND s.status <> 'voided'), 0)
+                    - COALESCE((
+                        SELECT SUM(jp.amount) FROM service_job_payments jp JOIN service_jobs j ON j.id = jp.service_job_id
+                         WHERE jp.customer_payment_id = cp.id AND j.status <> 'cancelled'), 0)
+                    - COALESCE((
+                        SELECT SUM(rf.amount) FROM customer_payments rf
+                         WHERE rf.refund_of_id = cp.id AND rf.type = 'refund' AND rf.status = 'posted'), 0) AS free
                FROM customer_payments cp
               WHERE cp.customer_id = ? AND cp.status = 'posted' AND cp.type = 'receipt'
              HAVING free > 0
@@ -124,7 +137,7 @@ class CustomerAccountService
      *
      * @return list<array{receipt_no: string, amount: string}> which receipts were used
      */
-    public function allocateAdvance(int $customerId, Sale $sale, string $amount): array
+    public function allocateAdvance(int $customerId, Sale|ServiceJob $sale, string $amount): array
     {
         $this->assertInTransaction();
         $amount = Decimal::round($amount, 2);
@@ -140,12 +153,7 @@ class CustomerAccountService
             }
             $take = Decimal::cmp($left, $r['free']) < 0 ? $left : $r['free'];
 
-            $row = SalePayment::query()->where('customer_payment_id', $r['id'])->where('sale_id', $sale->id)->first();
-            if ($row) {
-                $row->update(['amount' => Decimal::add((string) $row->amount, $take, 2)]);
-            } else {
-                SalePayment::query()->create(['customer_payment_id' => $r['id'], 'sale_id' => $sale->id, 'amount' => $take]);
-            }
+            $this->addAllocation($r['id'], $sale, $take);
             $used[] = ['receipt_no' => (string) CustomerPayment::query()->whereKey($r['id'])->value('receipt_no'), 'amount' => $take];
             $left = Decimal::sub($left, $take, 2);
         }
@@ -155,6 +163,116 @@ class CustomerAccountService
         }
 
         return $used;
+    }
+
+    /**
+     * Hands money back to the customer out of a receipt that is not (or no longer) settling anything: writes a `refund` payment that says
+     * which receipt it gives back, and for a named customer a `refund` debit on the account (their credit shrinks by the same amount).
+     * The walk-in customer has no account, so there is no ledger line.
+     */
+    public function refundReceipt(CustomerPayment $receipt, string $amount, PaymentMethod $method, User $by, string $why): CustomerPayment
+    {
+        $this->assertInTransaction();
+
+        $amount = Decimal::round($amount, 2);
+        if (! Decimal::isPositive($amount)) {
+            throw new InvalidArgumentException('Nothing to refund.');
+        }
+        if ($method->kind === 'customer_credit' || ! $method->is_active) {
+            throw new \DomainException('Choose a payment method that money can be handed back with.');
+        }
+
+        $free = collect($this->advanceReceipts($receipt->customer_id))->firstWhere('id', $receipt->id)['free'] ?? '0.00';
+        if (Decimal::cmp($amount, $free) > 0) {
+            throw new \DomainException("Only {$free} of receipt {$receipt->receipt_no} is not used for anything, so {$amount} cannot be refunded from it.");
+        }
+
+        $refund = new CustomerPayment;
+        $refund->forceFill([
+            'receipt_no' => app(DocumentNumberService::class)->next('customer_payment'),
+            'customer_id' => $receipt->customer_id, 'payment_date' => now(), 'payment_method_id' => $method->id, 'type' => 'refund',
+            'amount' => $amount, 'notes' => mb_substr($why, 0, 255), 'status' => 'posted', 'refund_of_id' => $receipt->id, 'created_by' => $by->id,
+        ])->save();
+
+        $customer = Customer::query()->withTrashed()->findOrFail($receipt->customer_id);
+        if (! $customer->is_walk_in) {
+            $this->postEntry($customer, 'refund', $amount, '0', $refund, "Refund {$refund->receipt_no} of {$receipt->receipt_no}: {$why}", $by);
+        }
+
+        return $refund;
+    }
+
+    /** Adds money to the allocation of a receipt to one invoice or one job (one row per pair), then refreshes that document's paid / due. */
+    public function addAllocation(int $paymentId, Sale|ServiceJob $doc, string $amount): void
+    {
+        $this->assertInTransaction();
+
+        if ($doc instanceof Sale) {
+            $row = SalePayment::query()->where('customer_payment_id', $paymentId)->where('sale_id', $doc->id)->first();
+            if ($row) {
+                $row->update(['amount' => Decimal::add((string) $row->amount, $amount, 2)]);
+            } else {
+                SalePayment::query()->create(['customer_payment_id' => $paymentId, 'sale_id' => $doc->id, 'amount' => $amount]);
+            }
+            app(SaleAccountService::class)->refreshSale($doc);
+
+            return;
+        }
+
+        $row = ServiceJobPayment::query()->where('customer_payment_id', $paymentId)->where('service_job_id', $doc->id)->first();
+        if ($row) {
+            $row->update(['amount' => Decimal::add((string) $row->amount, $amount, 2)]);
+        } else {
+            ServiceJobPayment::query()->create(['customer_payment_id' => $paymentId, 'service_job_id' => $doc->id, 'amount' => $amount]);
+        }
+        app(ServiceJobService::class)->refreshPayments($doc);
+    }
+
+    /**
+     * What a named customer still owes on documents: completed invoices and delivered service jobs with something left to pay, oldest first.
+     * With $lock the rows are locked (use it inside a transaction that already holds the customer lock).
+     *
+     * @return list<Sale|ServiceJob>
+     */
+    public function openDocuments(int $customerId, bool $lock = false): array
+    {
+        $sales = Sale::query()->where('customer_id', $customerId)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)->orderBy('id');
+        $jobs = ServiceJob::query()->where('customer_id', $customerId)->where('status', ServiceJob::DELIVERED)->where('due_amount', '>', 0)->orderBy('id');
+        if ($lock) {
+            $sales->lockForUpdate();
+            $jobs->lockForUpdate();
+        }
+
+        $docs = [...$sales->get()->all(), ...$jobs->get()->all()];
+        usort($docs, fn ($a, $b) => [self::documentDate($a)->getTimestamp(), $a instanceof Sale ? 0 : 1, $a->id] <=> [self::documentDate($b)->getTimestamp(), $b instanceof Sale ? 0 : 1, $b->id]);
+
+        return $docs;
+    }
+
+    /** The same list, as plain rows for screens and the aging report. */
+    public function openRows(int $customerId): array
+    {
+        return array_map(fn (Sale|ServiceJob $d) => [
+            'kind' => $d instanceof Sale ? 'sale' : 'job', 'key' => self::documentKey($d), 'id' => $d->id, 'no' => self::documentNo($d), 'date' => self::documentDate($d),
+            'total' => (string) $d->grand_total, 'paid' => (string) $d->paid_amount, 'due' => (string) $d->due_amount,
+            'url' => $d instanceof Sale ? route('sales.show', $d->id) : route('service.jobs.show', $d->id),
+        ], $this->openDocuments($customerId));
+    }
+
+    public static function documentNo(Sale|ServiceJob $d): string
+    {
+        return $d instanceof Sale ? (string) $d->invoice_no : (string) $d->invoice_no.' ('.$d->job_no.')';
+    }
+
+    public static function documentDate(Sale|ServiceJob $d): Carbon
+    {
+        return $d instanceof Sale ? $d->sale_date : $d->invoiced_at;
+    }
+
+    /** "12" for an invoice (as before), "j7" for a service job: the key used by the collect-payment form. */
+    public static function documentKey(Sale|ServiceJob $d): string
+    {
+        return $d instanceof Sale ? (string) $d->id : 'j'.$d->id;
     }
 
     /**
@@ -246,6 +364,16 @@ class CustomerAccountService
                                  WHERE c.is_walk_in = 0 AND cp.type = 'receipt') t
                               WHERE ABS(booked - amount) > 0.004 OR (status = 'voided' AND ABS(reversed - amount) > 0.004) OR (status = 'posted' AND reversed <> 0)") as $r) {
             $problems[] = "Receipt {$r->receipt_no} ({$r->amount}) is on the customer's account as {$r->booked}".($r->status === 'voided' ? " and reversed by {$r->reversed}" : '').'.';
+        }
+
+        // every refund handed to a named customer is on the account exactly once
+        foreach (DB::select("SELECT * FROM (
+                                SELECT cp.receipt_no, cp.amount,
+                                       COALESCE((SELECT SUM(l.debit) FROM customer_ledger_entries l WHERE l.entry_type = 'refund' AND l.source_type = 'customer_payment' AND l.source_id = cp.id), 0) AS booked
+                                  FROM customer_payments cp JOIN customers c ON c.id = cp.customer_id
+                                 WHERE c.is_walk_in = 0 AND cp.type = 'refund' AND cp.status = 'posted') t
+                              WHERE ABS(booked - amount) > 0.004") as $r) {
+            $problems[] = "Refund {$r->receipt_no} ({$r->amount}) is on the customer's account as {$r->booked}.";
         }
 
         return $problems;

@@ -33,12 +33,18 @@ class ReceivablesService
      */
     public function report(?int $customerId = null): array
     {
+        // unpaid invoices and delivered service jobs (a job is invoiced when it is delivered)
+        $only = $customerId ? ' AND %s.customer_id = ?' : '';
         $invoices = DB::select(
-            "SELECT s.id, s.invoice_no, s.customer_id, s.sale_date, s.grand_total, s.paid_amount, s.due_amount, DATEDIFF(CURDATE(), DATE(s.sale_date)) AS age
+            "SELECT 'sale' AS kind, s.id, s.invoice_no, s.customer_id, s.sale_date AS doc_date, s.grand_total, s.paid_amount, s.due_amount, DATEDIFF(CURDATE(), DATE(s.sale_date)) AS age
                FROM sales s JOIN customers c ON c.id = s.customer_id
-              WHERE s.status = 'completed' AND s.due_amount > 0 AND c.is_walk_in = 0 ".($customerId ? 'AND s.customer_id = ?' : '').'
-              ORDER BY s.sale_date, s.id',
-            $customerId ? [$customerId] : [],
+              WHERE s.status = 'completed' AND s.due_amount > 0 AND c.is_walk_in = 0".sprintf($only, 's')."
+             UNION ALL
+             SELECT 'job' AS kind, j.id, CONCAT(j.invoice_no, ' (', j.job_no, ')') AS invoice_no, j.customer_id, j.invoiced_at AS doc_date, j.grand_total, j.paid_amount, j.due_amount, DATEDIFF(CURDATE(), DATE(j.invoiced_at)) AS age
+               FROM service_jobs j JOIN customers c ON c.id = j.customer_id
+              WHERE j.status = 'delivered' AND j.due_amount > 0 AND c.is_walk_in = 0".sprintf($only, 'j').'
+              ORDER BY doc_date, kind, id',
+            $customerId ? [$customerId, $customerId] : [],
         );
 
         $zero = array_fill_keys(array_keys(self::BUCKETS), '0.00');
@@ -48,7 +54,8 @@ class ReceivablesService
             $byCustomer[$i->customer_id]['buckets'] ??= $zero;
             $byCustomer[$i->customer_id]['buckets'][$b] = Decimal::add($byCustomer[$i->customer_id]['buckets'][$b], (string) $i->due_amount, 2);
             $byCustomer[$i->customer_id]['invoices'][] = [
-                'id' => (int) $i->id, 'invoice_no' => $i->invoice_no, 'date' => (string) $i->sale_date, 'age' => (int) $i->age, 'bucket' => $b,
+                'id' => (int) $i->id, 'kind' => $i->kind, 'url' => $i->kind === 'job' ? route('service.jobs.show', (int) $i->id) : route('sales.show', (int) $i->id),
+                'invoice_no' => $i->invoice_no, 'date' => (string) $i->doc_date, 'age' => (int) $i->age, 'bucket' => $b,
                 'total' => Decimal::round((string) $i->grand_total, 2), 'paid' => Decimal::round((string) $i->paid_amount, 2), 'due' => Decimal::round((string) $i->due_amount, 2),
             ];
         }

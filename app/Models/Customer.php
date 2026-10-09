@@ -48,10 +48,15 @@ class Customer extends Model
         return $this->hasMany(CustomerLedgerEntry::class);
     }
 
+    public function serviceJobs(): HasMany
+    {
+        return $this->hasMany(ServiceJob::class);
+    }
+
     /** A customer with any history can only be deactivated, never deleted. */
     public function hasHistory(): bool
     {
-        return $this->sales()->exists() || $this->payments()->exists() || $this->ledgerEntries()->exists();
+        return $this->sales()->exists() || $this->payments()->exists() || $this->ledgerEntries()->exists() || $this->serviceJobs()->exists();
     }
 
     /** Phone number reduced to its digits, so "0300-1234567" and "0300 1234567" count as the same number. */

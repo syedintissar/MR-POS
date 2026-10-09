@@ -288,3 +288,30 @@ Every route is protected by route middleware (`can:`) and again inside the actio
 | Dashboard tile "Owed by customers" | `dashboard.financials` and `customers.view` | |
 
 Cashiers can add customers, see balances, sell on credit within a limit and collect payments; they cannot give credit terms, cancel a payment, delete a customer, set an opening balance or open the aging report. Technicians can find customers (names and phones) and nothing else: no balances, no payments, no statements.
+
+## 10. Phase 7 route map (as enforced)
+
+Every route is protected by route middleware (`can:`) and again inside the action that does the work. On top of the permission, **a person with only `service_jobs.view_assigned` (the Technician) may touch only the jobs assigned to them** (`ServiceJobAccess`). Tests: `Phase7RoleMatrixTest` runs every route against all four default roles (120 cases, with a technician working on their own job) plus a test that a technician is refused on every route of someone else's job and a guest test; `ServiceWebTest` covers the rest.
+
+| Screen / action | Permission | Technician |
+|---|---|---|
+| Job list and job page | `service_jobs.view_all`, or `view_assigned` (then only your own jobs) | own jobs only |
+| Receive a device | `service_jobs.create` | allowed: the job is assigned to them |
+| Edit the card (contact, device, problem, promised date, notes for the customer) | `service_jobs.edit` | own jobs |
+| Diagnosis and internal notes | `service_jobs.edit` **and** `service_jobs.manage_parts` | own jobs |
+| Assign a technician | `service_jobs.assign` | no |
+| Move the status on, reopen | `service_jobs.change_status` (the stored status decides) | own jobs |
+| Add / take off a part (stock moves) | `service_jobs.manage_parts` | own jobs |
+| Charges, estimate, discount, a different price for a part | `service_jobs.set_charges` | own jobs |
+| Take an advance | `customer_payments.create` | no |
+| Deliver and invoice | `service_jobs.deliver`; credit needs `sales.credit` (and `sales.override_credit_limit` over the limit) | no |
+| Cancel a job | `service_jobs.cancel` (managers) | no |
+| Original slip / invoice | a signed link, valid ten minutes | |
+| Reprint slip or invoice, invoice PDF (marked DUPLICATE, audited) | `sales.reprint` (and the right to see that job) | no |
+| Part picker, customer picker (names and phones only, never cost or money) | `service_jobs.manage_parts`, `service_jobs.create` | allowed |
+| See paid, due and the receipts on a job | `customer_payments.view` | no |
+| See the cost of parts | `products.view_cost` | no |
+| Service types (add, edit, switch off) | `service_types.manage` (managers) | no |
+| Dashboard tile | `service_jobs.view_all` or `view_assigned` ("My service jobs" for a technician) | own jobs |
+
+Cashiers receive devices, assign technicians, move jobs on, take advances and **deliver and invoice**; they cannot add parts, set charges or cancel. Technicians work on their own jobs (status, parts, charges, diagnosis) and never see money or cost.

@@ -12,6 +12,7 @@ use App\Exceptions\DuplicatePhoneException;
 use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\Sale;
+use App\Models\ServiceJob;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\SettingsService;
@@ -101,13 +102,14 @@ class CustomerController extends Controller
 
         if ($money) {
             $range = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date']]);
-            $open = Sale::query()->where('customer_id', $customer->id)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)->orderBy('sale_date')->orderBy('id')->get();
+            $open = collect($this->accounts->openRows($customer->id));   // unpaid invoices and delivered service jobs, oldest first
 
             $data += [
                 'open' => $open,
-                'owed' => $open->reduce(fn ($c, $s) => Decimal::add($c, (string) $s->due_amount, 2), '0.00'),
+                'owed' => $open->reduce(fn ($c, $s) => Decimal::add($c, $s['due'], 2), '0.00'),
                 'advance' => $this->accounts->advanceFor($customer->id),
-                'salesTotal' => (string) Sale::query()->where('customer_id', $customer->id)->where('status', Sale::COMPLETED)->sum('grand_total'),
+                'salesTotal' => Decimal::add((string) Sale::query()->where('customer_id', $customer->id)->where('status', Sale::COMPLETED)->sum('grand_total'), (string) ServiceJob::query()->where('customer_id', $customer->id)->where('status', ServiceJob::DELIVERED)->sum('grand_total'), 2),
+                'recentJobs' => $user->can('service_jobs.view_all') ? ServiceJob::query()->with('serviceType:id,name')->where('customer_id', $customer->id)->orderByDesc('received_at')->orderByDesc('id')->limit(10)->get() : collect(),
                 'paidTotal' => (string) CustomerPayment::query()->where('customer_id', $customer->id)->where('type', 'receipt')->where('status', 'posted')->sum('amount'),
                 'lastPayment' => CustomerPayment::query()->where('customer_id', $customer->id)->where('type', 'receipt')->where('status', 'posted')->latest('payment_date')->first(),
                 'recentSales' => Sale::query()->where('customer_id', $customer->id)->orderByDesc('sale_date')->orderByDesc('id')->limit(10)->get(),
@@ -248,7 +250,7 @@ class CustomerController extends Controller
         return [
             'customer' => $customer, 'statement' => $this->accounts->statement($customer->id, $range['from'] ?? null, $range['to'] ?? null),
             'from' => $range['from'] ?? null, 'to' => $range['to'] ?? null, 'pdf' => $pdf, 's' => $this->settings, 'logo' => $logo,
-            'open' => Sale::query()->where('customer_id', $customer->id)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)->orderBy('sale_date')->get(),
+            'open' => collect($this->accounts->openRows($customer->id)),
         ];
     }
 

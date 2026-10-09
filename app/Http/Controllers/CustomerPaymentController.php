@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\CustomerPayment;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
+use App\Models\ServiceJob;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\SettingsService;
@@ -71,7 +72,7 @@ class CustomerPaymentController extends Controller
     public function create(Request $request): View
     {
         $this->authorize('customer_payments.create');
-        $request->validate(['customer' => ['nullable', 'integer'], 'sale' => ['nullable', 'integer']]);
+        $request->validate(['customer' => ['nullable', 'integer'], 'sale' => ['nullable', 'integer'], 'job' => ['nullable', 'integer']]);
 
         $customer = $request->filled('customer') ? Customer::query()->withTrashed()->where('is_walk_in', false)->find($request->integer('customer')) : null;
         if (! $customer && $request->filled('sale')) {
@@ -79,16 +80,21 @@ class CustomerPaymentController extends Controller
             $customer = $customer && ! $customer->is_walk_in ? $customer : null;
         }
 
-        $bills = $customer ? Sale::query()->where('customer_id', $customer->id)->where('status', Sale::COMPLETED)->where('due_amount', '>', 0)->orderBy('sale_date')->orderBy('id')->get() : collect();
+        if (! $customer && $request->filled('job')) {
+            $customer = ServiceJob::query()->find($request->integer('job'))?->customer;
+            $customer = $customer && ! $customer->is_walk_in ? $customer : null;
+        }
+
+        $bills = $customer ? collect($this->accounts->openRows($customer->id)) : collect();   // unpaid invoices and delivered service jobs
 
         return view('customer-payments.create', [
             'customer' => $customer,
             'customers' => Customer::query()->where('is_walk_in', false)->where('is_active', true)->orderBy('name')->get(['id', 'name', 'balance']),
             'methods' => PaymentMethod::query()->forTill()->get(),
             'bills' => $bills,
-            'owed' => $bills->reduce(fn ($c, $b) => Decimal::add($c, (string) $b->due_amount, 2), '0.00'),
+            'owed' => $bills->reduce(fn ($c, $b) => Decimal::add($c, $b['due'], 2), '0.00'),
             'advance' => $customer ? $this->accounts->advanceFor($customer->id) : '0.00',
-            'focus' => $request->integer('sale') ?: null,
+            'focus' => $request->filled('job') ? 'j'.$request->integer('job') : ($request->integer('sale') ?: null),
         ]);
     }
 

@@ -6,10 +6,13 @@ namespace App\Actions\Customers;
 
 use App\Models\CustomerPayment;
 use App\Models\Sale;
+use App\Models\ServiceJob;
+use App\Models\ServiceJobPayment;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\Sales\SaleAccountService;
+use App\Services\Service\ServiceJobService;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -54,15 +57,21 @@ class VoidCustomerPayment
             $saleIds = $locked->allocations()->orderBy('sale_id')->pluck('sale_id')->all();
             $sales = Sale::query()->whereIn('id', $saleIds)->orderBy('id')->lockForUpdate()->get();
 
+            $jobIds = ServiceJobPayment::query()->where('customer_payment_id', $locked->id)->orderBy('service_job_id')->pluck('service_job_id')->all();
+            $jobs = ServiceJob::query()->whereIn('id', $jobIds)->orderBy('id')->lockForUpdate()->get();
+
             $locked->forceFill(['status' => 'voided', 'voided_at' => now(), 'voided_by' => $by->id, 'void_reason' => mb_substr($reason, 0, 255)])->save();
             foreach ($sales as $sale) {
                 $this->sales->refreshSale($sale);
+            }
+            foreach ($jobs as $job) {
+                app(ServiceJobService::class)->refreshPayments($job);
             }
 
             $this->accounts->postEntry($customer, 'payment_void', (string) $locked->amount, '0', $locked, "Payment {$locked->receipt_no} cancelled: {$reason}", $by);
 
             $this->audit->log('customer_payment_voided', 'customers', "Payment {$locked->receipt_no} from {$customer->name} cancelled: {$reason}", $locked, new: [
-                'reason' => $reason, 'amount' => (string) $locked->amount, 'invoices_reopened' => $sales->pluck('invoice_no')->all(),
+                'reason' => $reason, 'amount' => (string) $locked->amount, 'invoices_reopened' => [...$sales->pluck('invoice_no')->all(), ...$jobs->pluck('job_no')->all()],
             ], user: $by);
 
             return $locked->refresh();

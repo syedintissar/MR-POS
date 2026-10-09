@@ -1,9 +1,9 @@
 @php
     use App\Support\Money;
     $billData = $bills->map(fn ($b) => [
-        'id' => $b->id, 'no' => $b->invoice_no, 'date' => $b->sale_date->format('d M Y'), 'total' => (string) $b->grand_total, 'due' => (string) $b->due_amount,
+        'id' => $b['key'], 'no' => $b['no'], 'date' => $b['date']->format('d M Y'), 'total' => $b['total'], 'due' => $b['due'],
     ])->values();
-    $focusBill = $focus ? $bills->firstWhere('id', $focus) : null;
+    $focusBill = $focus ? $bills->firstWhere('key', (string) $focus) : null;
 @endphp
 <x-layouts.app title="Collect a payment">
     <div class="mx-auto max-w-5xl space-y-5">
@@ -51,9 +51,9 @@
 
             <form method="POST" action="{{ route('customer-payments.store') }}" class="space-y-5"
                   x-data="collectForm(@js($billData), @js([
-                      'amount' => old('amount', $focusBill ? (string) $focusBill->due_amount : ''),
+                      'amount' => old('amount', $focusBill ? $focusBill['due'] : ''),
                       'mode' => old('allocation', $focusBill ? 'manual' : 'auto'),
-                      'alloc' => (object) (old('allocations') ?? ($focusBill ? [$focusBill->id => (string) $focusBill->due_amount] : [])),
+                      'alloc' => (object) (old('allocations') ?? ($focusBill ? [$focusBill['key'] => $focusBill['due']] : [])),
                   ]))">
                 @csrf
                 <input type="hidden" name="customer_id" value="{{ $customer->id }}">

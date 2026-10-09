@@ -76,10 +76,15 @@ class SaleAccountService
         }
 
         // a payment is never allocated for more than its amount
-        foreach (DB::select("SELECT cp.receipt_no, cp.amount, COALESCE(SUM(sp.amount), 0) AS allocated
-                               FROM customer_payments cp LEFT JOIN sale_payments sp ON sp.customer_payment_id = cp.id
-                              WHERE cp.status = 'posted' GROUP BY cp.id, cp.receipt_no, cp.amount HAVING allocated > cp.amount + 0.004") as $r) {
-            $problems[] = "Receipt {$r->receipt_no} is allocated to invoices for more ({$r->allocated}) than its amount ({$r->amount}).";
+        // (invoices, service jobs and money handed back all draw on the same receipt)
+        foreach (DB::select("SELECT * FROM (
+                                SELECT cp.receipt_no, cp.amount,
+                                       COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp JOIN sales s ON s.id = sp.sale_id WHERE sp.customer_payment_id = cp.id AND s.status <> 'voided'), 0)
+                                     + COALESCE((SELECT SUM(jp.amount) FROM service_job_payments jp JOIN service_jobs j ON j.id = jp.service_job_id WHERE jp.customer_payment_id = cp.id AND j.status <> 'cancelled'), 0)
+                                     + COALESCE((SELECT SUM(rf.amount) FROM customer_payments rf WHERE rf.refund_of_id = cp.id AND rf.status = 'posted'), 0) AS allocated
+                                  FROM customer_payments cp WHERE cp.status = 'posted' AND cp.type = 'receipt') t
+                              WHERE allocated > amount + 0.004") as $r) {
+            $problems[] = "Receipt {$r->receipt_no} is used for more ({$r->allocated}) than its amount ({$r->amount}).";
         }
 
         // what the invoice says was sold is what left the stock (service items have no stock)

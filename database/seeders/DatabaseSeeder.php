@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             DocumentSequenceSeeder::class,
             CatalogueSeeder::class,
             PaymentMethodSeeder::class,
+            ServiceTypeSeeder::class,
         ]);
     }
 }
