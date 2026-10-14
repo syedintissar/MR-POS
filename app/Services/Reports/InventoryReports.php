@@ -32,9 +32,13 @@ class InventoryReports
             $args[] = $f->id('category_id');
         }
 
+        // the totals are added up by the database (every product), the list shows the first 3,000 so a 20,000-product shop still gets its report quickly
+        $where = substr($sql, strpos($sql, ' WHERE '));
+        $sum = DB::selectOne('SELECT COALESCE(SUM(p.current_stock), 0) AS q, COALESCE(SUM(ROUND(p.current_stock * p.average_cost, 2)), 0) AS v, COALESCE(SUM(ROUND(p.current_stock * p.sale_price, 2)), 0) AS r, COUNT(*) AS n FROM products p'.$where, $args);
+
         $rows = [];
-        $tot = ['product' => 'Total', 'quantity' => '0.000', 'value' => '0.00', 'retail' => '0.00', 'margin' => '0.00'];
-        foreach (DB::select($sql.' ORDER BY c.name, p.name', $args) as $p) {
+        $tot = ['product' => 'Total', 'quantity' => Decimal::round((string) $sum->q, 3), 'value' => Decimal::round((string) $sum->v, 2), 'retail' => Decimal::round((string) $sum->r, 2), 'margin' => Decimal::sub((string) $sum->r, (string) $sum->v, 2)];
+        foreach (DB::select($sql.' ORDER BY c.name, p.name LIMIT 3000', $args) as $p) {
             $qty = Decimal::round((string) $p->current_stock, 3);
             $value = Decimal::mul($qty, (string) $p->average_cost, 2);
             $retail = Decimal::mul($qty, (string) $p->sale_price, 2);
@@ -42,17 +46,13 @@ class InventoryReports
                 'product' => $p->name, 'sku' => $p->sku, 'category' => $p->category, 'quantity' => $qty, 'unit' => $p->unit, 'average_cost' => Decimal::round((string) $p->average_cost, 4),
                 'value' => $value, 'sale_price' => Decimal::round((string) $p->sale_price, 2), 'retail' => $retail, 'margin' => Decimal::sub($retail, $value, 2), '_href' => route('products.show', $p->id),
             ];
-            $tot['quantity'] = Decimal::add($tot['quantity'], $qty, 3);
-            $tot['value'] = Decimal::add($tot['value'], $value, 2);
-            $tot['retail'] = Decimal::add($tot['retail'], $retail, 2);
-            $tot['margin'] = Decimal::add($tot['margin'], Decimal::sub($retail, $value, 2), 2);
         }
 
         return (new ReportResult('Stock valuation', 'As at '.now()->format('d M Y, H:i')))->table(null, [
             $this->col('product', 'Product'), $this->col('sku', 'SKU'), $this->col('category', 'Category'), $this->col('quantity', 'In stock', 'qty'), $this->col('unit', 'Unit'),
             $this->col('average_cost', 'Average cost', 'money', 'products.view_cost'), $this->col('value', 'Value at cost', 'money', 'products.view_cost'),
             $this->col('sale_price', 'Sale price', 'money'), $this->col('retail', 'Value at sale price', 'money'), $this->col('margin', 'Margin if all sold', 'money', 'products.view_cost'),
-        ], $rows, $tot)->note('Stock is valued at the average cost. Negative stock (sold before it was received) shows as a negative value.');
+        ], $rows, $tot)->note(((int) $sum->n > 3000 ? 'The list shows the first 3,000 of '.number_format((int) $sum->n).' products; the totals are for all of them. Choose a category to narrow it. ' : '').'Stock is valued at the average cost. Negative stock (sold before it was received) shows as a negative value.');
     }
 
     /** Best sellers of the period, and stock that has not sold at all in it. */

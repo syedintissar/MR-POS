@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\ForcePasswordChange;
 use App\Http\Middleware\IpAllowList;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Order matters: network rule first, then the user checks (they need the session/auth to be started).
-        $middleware->web(prepend: [IpAllowList::class]);
+        $middleware->web(prepend: [IpAllowList::class, SecurityHeaders::class]);
         $middleware->web(append: [EnsureUserIsActive::class, ForcePasswordChange::class]);
 
         $middleware->alias([
