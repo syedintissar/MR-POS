@@ -168,7 +168,7 @@
 | service_jobs.deliver | ✅ | ✅ | ✅ | — |
 | service_jobs.cancel | ✅ | ✅ | — | — |
 | service_types.manage | ✅ | ✅ | — | — |
-| expenses.view / create | ✅ | ✅ | ◐ create only (petty cash), sees own | — |
+| expenses.view / create | ✅ | ✅ | — (owner decision, Phase 8b: cashiers do not see or record expenses; an administrator can grant it to a role) | — |
 | expenses.edit / void | ✅ | ✅ | — | — |
 | expense_categories.manage | ✅ | ✅ | — | — |
 | reports.sales / inventory / purchases / customers / suppliers / service / expenses | ✅ | ✅ | — | — |
@@ -194,7 +194,7 @@
 | Customer payment | `void`: permission, status=posted, and the payment is not the source of a refund already given |
 | Purchase | `update`/`delete`: only when status=draft. `receive`: draft only. `void`: received and stock sufficient |
 | Service job | `view`/`update` for technicians: `technician_id == me`. Locked when Delivered or Cancelled (no updates except notes by managers). Parts changes are allowed only in permitted statuses |
-| Expense | `update`: `expenses.edit`, status=posted and `created_at` is today. Cashiers see only expenses they created |
+| Expense | `update`: `expenses.edit`, status=posted and `created_at` is today. Only roles that hold `expenses.view` see expenses at all |
 | User | Cannot deactivate or demote yourself. Cannot remove the last active Admin. Only an Admin can assign the Admin role |
 | Role | The Admin role cannot be deleted or reduced. Roles in use cannot be deleted |
 | Backup | Download, delete and restore require a password confirmation within 10 min. Delete is not allowed for `is_protected` or for the newest successful verified backup |
@@ -322,8 +322,8 @@ Every route is protected by route middleware (`can:`) and again inside the actio
 
 | Screen / action | Permission | Cashier | Technician |
 |---|---|---|---|
-| Expenses: list, one expense, its bill, the categories | `expenses.view` | yes | no |
-| Record an expense | `expenses.create` | yes | no |
+| Expenses: list, one expense, its bill, the categories | `expenses.view` (administrators and managers; **not cashiers**, Phase 8b) | no | no |
+| Record an expense | `expenses.create` (administrators and managers) | no | no |
 | Correct an expense (the day it was entered), manage categories | `expenses.edit` (managers) | no | no |
 | Cancel an expense (reason and password) | `expenses.void` (managers) | no | no |
 | Sales returns: list and one return | `sale_returns.view` | yes | no |
@@ -345,3 +345,16 @@ Every route is protected by route middleware (`can:`) and again inside the actio
 | Technician's "My open jobs" | `service_jobs.view_assigned` without `view_all` | no | yes |
 
 A role built by the administrator can hold any of these on its own: the cost and profit permissions are the three that must never reach a Cashier or Technician (`PermissionCatalogue::COST_PROFIT`).
+
+## 12. Phase 8b: the owner's decisions (as enforced)
+
+| Change | Permission / rule | Cashier | Technician |
+|---|---|---|---|
+| Expenses are closed to cashiers | the Cashier role no longer holds `expenses.view` / `expenses.create` (removed from the defaults **and**, for an existing installation, by the migration). Enforced on the server (routes and actions, 403), and on the screens: no menu entry, no dashboard card or list, and the expense columns of the money-by-method report and the closing summary need `expenses.view` too. An administrator can still grant the two permissions to any role | no | no |
+| Take goods back after the return period (default 7 days) | **`sale_returns.override_period`** (new; Manager and Administrator). The person must also write a reason (3 letters or more); it is stored on the return and audited (`sale_return_period_exception`). A role that may create returns but lacks this permission is held to the period | no | no |
+| Exchange (return plus replacement sale in one step) | needs **both** `sale_returns.create` and `sales.create`; paying the returned value back as money (mode "refund") also needs `sale_returns.refund` | no | no |
+| Use supplier credit on bills | `supplier_payments.create` | no | no |
+| Take a use of supplier credit back | `supplier_payments.void`, with the password and a reason | no | no |
+| Change the return period or the restocking fee | `settings.manage` (Administrator) | no | no |
+
+`Phase8RoleMatrixTest` was updated (expense routes are now managers only, 92 permissions in the catalogue); `ExpenseTest` proves a cashier and a technician get 403 on every expense route and see nothing on the dashboard.

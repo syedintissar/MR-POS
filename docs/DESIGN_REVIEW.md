@@ -290,7 +290,7 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P8-D7 | Stock on a return | Only lines marked "put back in stock" (default for *resellable*) add stock, at the cost on the invoice line; a damaged or defective line is a write-off and a service item has no stock |
 | P8-D8 | Purchase returns | Against a received purchase (never more than received less already sent back) or without a bill. The supplier credits what it billed for the units; the stock leaves at the landed cost; the credit first reduces what is owed on the bill; the rest stays as credit on the supplier's account or comes back as money |
 | P8-D9 | Cancelling a return | `sales.void` / `purchases.void` (managers), with the password and a reason. A sales return whose store credit was already spent cannot be cancelled; goods sold again cannot be taken out of stock again |
-| P8-D10 | Expenses | Cashiers may record them (`expenses.create`), managers correct (the same day only) and cancel; the bill (jpg, png, pdf up to 5 MB) is private. Expenses have no ledger |
+| P8-D10 | Expenses (**changed by the owner, see §12**: cashiers get no access) | ~~Cashiers may record them (`expenses.create`)~~, managers correct (the same day only) and cancel; the bill (jpg, png, pdf up to 5 MB) is private. Expenses have no ledger |
 | P8-D11 | Reports and cost | Every report needs the permission of its area; cost columns need `products.view_cost`, profit columns `reports.profit`; PDF / Excel / CSV need `reports.export` and are audited; **printing is allowed with the report's own permission** |
 | P8-D12 | Money by method | Customer credit is not money, so it is left out of the money-in-and-out report; the report adds customer receipts, refunds, supplier payments and refunds, and expenses per method |
 
@@ -318,3 +318,22 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P8-Q4 | Do you want an **Exchange** button (return plus new sale in one screen)? | Not built: give store credit, then sell with "Customer credit" |
 | P8-Q5 | Should **rounding differences** on invoices (the "round to nearest 10" setting) be a line in the profit report? | Not included: profit is worked out on net amounts |
 | P8-Q6 | Who may see **expenses**? Cashiers may record them and see the list | Default kept; remove `expenses.view` from the Cashier role in Roles & permissions if you prefer |
+
+## 12. Phase 8b: the owner's answers to the Phase 8 questions
+
+| # | Question | The owner's decision | How it was built |
+|---|---|---|---|
+| P8-Q1 | Use supplier credit on bills? | **Yes**: a "Use Supplier Credit" button that applies the credit to bills, never twice, with a complete history | Supplier page and each bill have the button; oldest bill first or one chosen bill; every use is a row (return, bill, amount, who, when), cancellable by a manager with the password; locked and tested with real parallel processes (without the locks two people spend the same credit) |
+| P8-Q2 | Return period? | **7 days by default, configurable by the Administrator; managers may approve an exception with a mandatory reason and an audit entry** | `sales.return_days` setting; `sale_returns.override_period` permission; reason stored on the return and audited; the return page explains and asks |
+| P8-Q3 | Restocking fee? | **Disabled by default; an optional configurable fee for the future** | Settings: on/off and a percentage (0 to 50); applied to the value without tax; can be waived per return; shown on the return, the receipt and the reports; counted as revenue kept |
+| P8-Q4 | One-click exchange? | **Yes**: return and replacement sale together, correct stock, payments, refunds and price difference, atomic | `ExchangeSale`: one transaction around the two ordinary actions; net mode (store credit) or refund mode; tested for even, dearer, cheaper, on-account, fee, tax, return-period, out-of-stock rollback, permission and cancel cases, and with parallel processes |
+| P8-Q5 | Rounding differences? | **Recorded separately, in net profit, not gross; prices and costs unchanged** | A "Rounding differences on invoices" line and column; gross profit is unchanged |
+| P8-Q6 | Expenses visibility? | **Cashiers must not see expenses by default; only Admin and authorised Managers; enforced in the screens and on the server** | Permissions removed from the Cashier role (defaults and a migration for existing installations); every screen, list, card and report column is gated; tests prove 403 and absence |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P8b-01 | The exchange needed to know what the new items cost before paying, but the sale's pricing was inside its private posting code | Pricing was moved into one private method used by the sale and by a new `CompleteSale::quote()`; the 75 sale and credit-sale tests pass unchanged |
+| P8b-02 | A bill paid only by supplier credit would still say "unpaid" | The payment status counts credit used (a test caught it) |
+| P8b-03 | An exchange of a named customer could take the credit from an older advance instead of the return's own | Credit is interchangeable, the total used is exact; the return of an exchange is cancelled only after its replacement invoice, so the two can never half-undo |
+| P8b-04 | The MariaDB server was down again after a PC restart and every test failed with "connection refused" | Restarted by hand; still waiting for the Windows service (owner action) |

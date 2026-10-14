@@ -55,6 +55,10 @@ class VoidSaleReturn
                 throw new DomainException("{$locked->return_no} has already been cancelled.");
             }
             $sale = Sale::query()->whereKey($locked->sale_id)->lockForUpdate()->firstOrFail();
+            $credited = Decimal::sub((string) $locked->total, (string) $locked->restocking_fee, 2);   // what had gone back to the customer
+            if ($locked->exchange_sale_id && Sale::query()->whereKey($locked->exchange_sale_id)->where('status', Sale::COMPLETED)->exists()) {
+                throw new DomainException("{$locked->return_no} is part of an exchange: cancel the replacement invoice first.");
+            }
             $rows = $locked->items()->orderBy('id')->get();
             SaleItem::query()->whereIn('id', $rows->pluck('sale_item_id'))->orderBy('id')->lockForUpdate()->get();
 
@@ -77,13 +81,13 @@ class VoidSaleReturn
                 $item = SaleItem::query()->findOrFail($row->sale_item_id);
                 $item->forceFill(['returned_quantity' => Decimal::nonNegative(Decimal::sub((string) $item->returned_quantity, (string) $row->quantity, 3), 3)])->save();
             }
-            $sale->forceFill(['returned_amount' => Decimal::nonNegative(Decimal::sub((string) $sale->returned_amount, (string) $locked->total, 2), 2)])->save();
+            $sale->forceFill(['returned_amount' => Decimal::nonNegative(Decimal::sub((string) $sale->returned_amount, $credited, 2), 2)])->save();
 
             $locked->forceFill(['status' => SaleReturn::VOIDED, 'voided_at' => now(), 'voided_by' => $by->id, 'void_reason' => mb_substr($reason, 0, 255)])->save();
             $this->sales->refreshSale($sale);
 
             if (! $customer->is_walk_in) {
-                $this->accounts->postEntry($customer, 'sale_return_void', (string) $locked->total, '0', $locked, "Return {$locked->return_no} cancelled: {$reason}", $by);
+                $this->accounts->postEntry($customer, 'sale_return_void', $credited, '0', $locked, "Return {$locked->return_no} cancelled: {$reason}", $by);
             }
             if ($locked->refundPayment && $locked->refundPayment->status === 'posted') {
                 $locked->refundPayment->forceFill(['status' => 'voided', 'voided_at' => now(), 'voided_by' => $by->id, 'void_reason' => 'Return cancelled'])->save();

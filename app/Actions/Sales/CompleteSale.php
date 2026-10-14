@@ -121,12 +121,15 @@ class CompleteSale
         return $existing->load('items', 'customer', 'cashier');
     }
 
-    /** @param  array<string, mixed>  $data */
-    private function post(array $data, string $key, User $by): Sale
+    /**
+     * Steps 1-4 of a sale: lock the products, price every line on the server, work out the totals, and collect what needs a manager's approval.
+     * Shared by the sale itself and by quote().
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{tier: string, inclusive: bool, priced: list<array<string, mixed>>, calc: array<string, mixed>, reasons: array<string, array{code: string, message: string, permission: string}>}
+     */
+    private function price(array $data, Customer $customer, User $by): array
     {
-        // 0. the customer is locked FIRST (a named customer's account is changed by sales, payments and cancellations alike)
-        $customer = $this->customer($data['customer_id'] ?? null);
-
         $lines = array_values($data['lines'] ?? []);
         if ($lines === [] || count($lines) > 200) {
             throw new DomainException($lines === [] ? 'Add at least one product to the sale.' : 'A sale can have at most 200 lines.');
@@ -222,6 +225,29 @@ class CompleteSale
                 $reasons['below_min_price'] = ['code' => 'below_min_price', 'message' => 'an item is sold below its lowest allowed price', 'permission' => 'sales.below_min_price'];
             }
         }
+
+        return ['tier' => $tier, 'inclusive' => $inclusive, 'priced' => $priced, 'calc' => $calc, 'reasons' => $reasons];
+    }
+
+    /**
+     * What the server would charge for these lines (the total of the invoice), worked out exactly as the sale itself works it out. Nothing is written;
+     * call it inside a transaction (it locks the products). The exchange needs it to know how much of a return pays for the new items.
+     *
+     * @param  array<string, mixed>  $data  the same data as execute()
+     */
+    public function quote(array $data, User $by): string
+    {
+        return (string) $this->price($data, $this->customer($data['customer_id'] ?? null), $by)['calc']['grand_total'];
+    }
+
+    /** @param  array<string, mixed>  $data */
+    private function post(array $data, string $key, User $by): Sale
+    {
+        // 0. the customer is locked FIRST (a named customer's account is changed by sales, payments and cancellations alike)
+        $customer = $this->customer($data['customer_id'] ?? null);
+
+        ['tier' => $tier, 'inclusive' => $inclusive, 'priced' => $priced, 'calc' => $calc, 'reasons' => $reasons] = $this->price($data, $customer, $by);
+        $totalDiscount = Decimal::add($calc['line_discount_total'], $calc['invoice_discount_amount'], 2);
 
         // 5. the payments (and, for a named customer, what stays on their account)
         $plan = $this->payments($data['payments'] ?? [], $calc['grand_total'], $customer, $by, $reasons);

@@ -198,7 +198,7 @@ class ExpenseTest extends TestCase
     public function test_recording_through_the_form(): void
     {
         Storage::fake('local');
-        $this->as('Cashier');
+        $this->as('Manager');
 
         $this->post('/expenses', $this->data(['amount' => '250', 'description' => 'Tea and biscuits', 'attachment' => UploadedFile::fake()->image('slip.jpg')]))->assertRedirect();
         $e = Expense::query()->firstOrFail();
@@ -211,10 +211,45 @@ class ExpenseTest extends TestCase
         $this->post('/expenses', $this->data(['attachment' => UploadedFile::fake()->create('x.exe', 10)]))->assertSessionHasErrors('attachment');
         $this->post('/expenses', $this->data(['attachment' => UploadedFile::fake()->create('big.pdf', 6000, 'application/pdf')]))->assertSessionHasErrors('attachment');
         $this->assertSame(1, Expense::query()->count());
+    }
 
-        // a cashier may record but not correct or cancel
+    public function test_cashiers_and_technicians_cannot_reach_expenses_at_all(): void
+    {
+        Storage::fake('local');
+        $e = $this->save([], User::factory()->withRole('Manager')->create(), UploadedFile::fake()->create('bill.pdf', 50, 'application/pdf'));
+
+        foreach (['Cashier', 'Technician'] as $role) {
+            $this->as($role);
+            foreach (['/expenses', '/expenses/create', "/expenses/{$e->id}", "/expenses/{$e->id}/edit", "/expenses/{$e->id}/attachment", '/expenses/categories'] as $uri) {
+                $this->get($uri)->assertForbidden();
+            }
+            $this->post('/expenses', $this->data())->assertForbidden();
+            $this->put("/expenses/{$e->id}", $this->data())->assertForbidden();
+            $this->post("/expenses/{$e->id}/void", ['reason' => 'x'])->assertForbidden();
+            $this->post('/expenses/categories', ['name' => 'Nope'])->assertForbidden();
+
+            // nothing about expenses on any page they can open: no menu entry, no figure, no list
+            $this->get('/')->assertOk()->assertDontSee(route('expenses.index'), false)->assertDontSee('Recent expenses')->assertDontSee('EXP-')->assertDontSee('4,500');
+        }
+        $this->assertSame(1, Expense::query()->count(), 'nothing was recorded, changed or cancelled');
+        $this->assertSame('posted', $e->fresh()->status);
+
+        // the same through the action, in case a screen is ever added
+        $this->expectException(AuthorizationException::class);
+        $this->save([], User::factory()->withRole('Cashier')->create());
+    }
+
+    public function test_a_manager_sees_the_expenses_menu_and_an_administrator_can_hand_the_permission_to_a_role(): void
+    {
+        $this->as('Manager');
+        $this->get('/')->assertOk()->assertSee(route('expenses.index'), false);
+
+        // authorised on purpose: a cashier role that was given the permission can use it (and only the part it was given)
+        $this->asWithOnly(['dashboard.view', 'expenses.view', 'expenses.create']);
+        $this->get('/expenses')->assertOk();
+        $this->post('/expenses', $this->data())->assertRedirect();
+        $e = Expense::query()->firstOrFail();
         $this->get("/expenses/{$e->id}/edit")->assertForbidden();
-        $this->put("/expenses/{$e->id}", $this->data())->assertForbidden();
         $this->post("/expenses/{$e->id}/void", ['reason' => 'x'])->assertForbidden();
     }
 
@@ -247,7 +282,7 @@ class ExpenseTest extends TestCase
         $this->assertFalse($cat->fresh()->is_active);
 
         $this->as('Cashier');
-        $this->get('/expenses/categories')->assertOk();
+        $this->get('/expenses/categories')->assertForbidden();
         $this->post('/expenses/categories', ['name' => 'Nope'])->assertForbidden();
         $this->post("/expenses/categories/{$cat->id}/toggle")->assertForbidden();
     }

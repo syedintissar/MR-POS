@@ -19,7 +19,10 @@ class PurchaseReturn extends Model
 
     protected function casts(): array
     {
-        return ['return_date' => 'datetime', 'voided_at' => 'datetime', 'subtotal' => 'decimal:2', 'tax_amount' => 'decimal:2', 'total' => 'decimal:2'];
+        return [
+            'return_date' => 'datetime', 'voided_at' => 'datetime', 'subtotal' => 'decimal:2', 'tax_amount' => 'decimal:2', 'total' => 'decimal:2',
+            'applied_to_due' => 'decimal:2', 'credit_amount' => 'decimal:2', 'refund_amount' => 'decimal:2',
+        ];
     }
 
     public function supplier(): BelongsTo

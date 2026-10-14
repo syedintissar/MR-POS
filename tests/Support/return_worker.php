@@ -13,10 +13,12 @@
  * reaching the caller, which must never happen).
  */
 
+use App\Actions\Purchasing\ApplySupplierCredit;
 use App\Actions\Purchasing\CreatePurchaseReturn;
 use App\Actions\Purchasing\VoidPurchase;
 use App\Actions\Purchasing\VoidPurchaseReturn;
 use App\Actions\Sales\CreateSaleReturn;
+use App\Actions\Sales\ExchangeSale;
 use App\Actions\Sales\VoidSaleReturn;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
@@ -25,6 +27,7 @@ use App\Models\Sale;
 use App\Models\SaleReturn;
 use App\Models\User;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Str;
 
 require __DIR__.'/../../vendor/autoload.php';
 
@@ -64,6 +67,15 @@ try {
     } elseif ($mode === 'pvoid') {
         $return = app(VoidPurchaseReturn::class)->execute(PurchaseReturn::query()->findOrFail((int) $argv[4]), 'concurrency test', $user);
         echo "OK:{$return->id}\n";
+    } elseif ($mode === 'usecredit') {
+        $used = app(ApplySupplierCredit::class)->execute((int) $argv[4], null, $user);
+        echo 'OK:'.count($used)."\n";
+    } elseif ($mode === 'exchange') {
+        $sale = Sale::query()->findOrFail((int) $argv[4]);
+        $item = $sale->items()->orderBy('id')->firstOrFail();
+        $done = app(ExchangeSale::class)->execute($sale, [['sale_item_id' => $item->id, 'quantity' => $argv[5], 'condition' => 'resellable', 'restock' => true]],
+            [['product_id' => (int) $argv[6], 'quantity' => '1']], ['mode' => 'refund'], 'concurrency test', (string) Str::uuid(), $user);
+        echo "OK:{$done['return']->id}\n";
     } elseif ($mode === 'voidpurchase') {
         $purchase = app(VoidPurchase::class)->execute(Purchase::query()->findOrFail((int) $argv[4]), 'concurrency test', $user);
         echo "OK:{$purchase->id}\n";

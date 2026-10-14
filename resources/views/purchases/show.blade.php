@@ -32,7 +32,10 @@
                     @can('purchase_returns.create')<a href="{{ route('purchase-returns.create', ['purchase' => $purchase->id]) }}" class="btn btn-secondary btn-sm">Send goods back</a>@endcan
                 @endif
                 @if($purchase->isReceived() && (float) $purchase->due_amount > 0)
-                    @can('supplier_payments.create')<a href="{{ route('supplier-payments.create', ['supplier' => $purchase->supplier_id, 'purchase' => $purchase->id]) }}" class="btn btn-primary btn-sm">Pay supplier</a>@endcan
+                    @can('supplier_payments.create')
+                        @if((float) $creditAvailable > 0)<form method="POST" action="{{ route('purchases.use-credit', $purchase) }}" data-confirm="Use the supplier's credit ({{ Money::withSymbol($creditAvailable) }} available) on this bill?" data-confirm-label="Use credit">@csrf<button class="btn btn-secondary btn-sm">Use supplier credit ({{ Money::format($creditAvailable) }})</button></form>@endif
+                        <a href="{{ route('supplier-payments.create', ['supplier' => $purchase->supplier_id, 'purchase' => $purchase->id]) }}" class="btn btn-primary btn-sm">Pay supplier</a>
+                    @endcan
                 @endif
             </div>
         </div>
@@ -105,6 +108,23 @@
                 @endif
             </div>
         </div>
+
+        @if($purchase->creditApplications->isNotEmpty())
+            <div class="card overflow-x-auto">
+                <div class="card-header"><h2 class="card-title">Supplier credit used on this bill</h2></div>
+                <table class="table"><tbody>
+                @foreach($purchase->creditApplications as $u)
+                    <tr class="{{ $u->isVoided() ? 'text-slate-400 line-through' : '' }}">
+                        <td class="whitespace-nowrap">{{ $u->created_at->format('d M Y, H:i') }}</td>
+                        <td class="font-mono text-xs">{{ $u->purchaseReturn->return_no }}</td>
+                        <td>{{ $u->creator?->name }}</td>
+                        <td class="text-right">{{ Money::format($u->amount) }}</td>
+                        <td class="text-right no-underline">@if($u->isVoided())<span class="badge badge-red">cancelled</span>@endif</td>
+                    </tr>
+                @endforeach
+                </tbody></table>
+            </div>
+        @endif
 
         @if($purchase->returns->isNotEmpty())
             @can('purchase_returns.view')

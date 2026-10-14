@@ -109,7 +109,7 @@ class RoleMatrixTest extends TestCase
         sort($catalogue);
 
         $this->assertSame($catalogue, $db);
-        $this->assertCount(91, $catalogue);
+        $this->assertCount(92, $catalogue);
     }
 
     public function test_admin_role_has_every_permission_and_manager_misses_the_documented_ones(): void

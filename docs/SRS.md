@@ -173,6 +173,7 @@ Priority: **M** = Must (v1 release blocker), **S** = Should (v1 unless descoped 
 | PRT-01 | Return goods to the supplier, against a received purchase (qty ≤ received − already returned) or, for stock that predates the system, without a purchase reference. | M |
 | PRT-02 | Stock decreases at the line's landed cost and average cost is recalculated. The supplier ledger is debited, which reduces the payable. | M |
 | PRT-03 | Settlement: reduce the payable (default) or record a cash/bank refund received from the supplier. | M |
+| PRT-04 | Credit left with a supplier is recorded per return and can be used on bills with a "Use supplier credit" button (oldest bill first or one bill): never used twice, every use recorded and cancellable, balance unchanged by a use. | M |
 
 ### 3.8 Customers & receivables (CUS)
 | ID | Requirement | P |
@@ -212,6 +213,7 @@ Priority: **M** = Must (v1 release blocker), **S** = Should (v1 unless descoped 
 |---|---|---|
 | EXP-01 | Configurable expense categories, seeded with Rent, Electricity, Salary, Internet, Transport, Maintenance, Tea/Refreshments, Office expense, Miscellaneous. | M |
 | EXP-02 | Expense fields: expense no, category, amount, date, payment method, payee, description, attachment (jpg/png/pdf ≤ 5 MB), entered by (automatic). | M |
+| EXP-04 | Expenses are visible only to the Administrator and Managers authorised with `expenses.view` / `expenses.create`; **cashiers and technicians have no access by default**, enforced on every screen, report column and server route. | M |
 | EXP-03 | Expenses are editable only on the day they are entered and only by users with `expenses.edit`. The old and new values are audited. After that day they can only be voided. | M |
 
 ### 3.11 Sales returns (SRT)
@@ -224,6 +226,9 @@ Priority: **M** = Must (v1 release blocker), **S** = Should (v1 unless descoped 
 | SRT-05 | A return receipt is printed. The return history is visible on the invoice and on the customer profile. | M |
 | SRT-06 | Non-restocked returned items are reported as a "damaged returns" write-off in the profit report. | M |
 | SRT-07 | A warranty indicator appears on the return screen when the line has a serial number or warranty. | C |
+| SRT-08 | Goods can be returned within `sales.return_days` days of the invoice (default 7, Administrator-configurable, 0 = no limit). After that a user with `sale_returns.override_period` may allow it with a mandatory reason, recorded on the return and audited. | M |
+| SRT-09 | Optional restocking fee (`sales.restocking_fee_enabled`, off by default; percentage 0 to 50 of the value without tax); the customer is credited the value less the fee; it can be waived; the fee is revenue kept. | S |
+| SRT-10 | Exchange: the return and the replacement sale are one atomic step (stock, payments, refunds, price difference); the two documents are linked; the return of an exchange is cancelled only after the replacement invoice. | M |
 
 ### 3.12 Profit (PFT)
 | ID | Requirement | P |
@@ -234,6 +239,7 @@ Priority: **M** = Must (v1 release blocker), **S** = Should (v1 unless descoped 
 | PFT-04 | Net profit = Gross profit − Expenses − Net inventory losses (adjustments out minus adjustments in, at cost). | M |
 | PFT-05 | The report shows each component separately, plus the damaged-returns write-off, by day/week/month/year/custom range. | M |
 | PFT-06 | Service revenue is recognised on the service invoice date (delivery). Parts cost is recognised on the same date. | M |
+| PFT-07 | Rounding differences on invoices (round-off) are recorded separately and included in **net** profit, never in gross profit; prices and costs are never changed. | M |
 
 ### 3.13 Reports (RPT)
 All reports have a date filter, search, a print view, and PDF export. CSV/XLSX export is available where the report is tabular. Exports respect cost/profit visibility (BR-08).
@@ -375,4 +381,5 @@ Full specification: [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Summary of the Must 
 | **PFT-01…06** profit with service revenue and parts cost, returns, expenses, stock losses, grouped by day / week / month / year / custom | **Built in Phase 8** (one engine, `ProfitService`; extra lines for written-off service parts and the difference on goods sent back to suppliers) |
 | **RPT-01…13** the report set (sales, by product / category / customer / cashier, payments by method, returns, purchases and purchase returns, stock valuation, expenses, profit, customer and supplier balances with aging, service jobs and technician performance, top and slow sellers, closing summary) with date filters, a find box, print, PDF, CSV and Excel, cost and profit columns by permission, exports audited. **RPT-14** audit log viewer came with Phase 2. RPT-06's stock list and movements are the Stock and Stock card screens (linked from the reports page) | **Built in Phase 8** |
 | **DASH-01…05, 07** period filter, KPI cards (invoiced, after returns, money received, left on account, purchases, expenses, service jobs delivered, receivables, payables, open jobs), profit cards by permission, latest sales / payments / expenses / jobs, charts (sales and gross profit by day, week or month; 12 months against the year before), the technician's own jobs. **DASH-06** (backup warnings) came with Phase 2 | **Built in Phase 8** |
+| **Phase 8b: owner decisions** (2026-10-13): supplier credit to bills, 7-day return period with manager exception, optional restocking fee, one-click exchange, rounding in net profit only, expenses closed to cashiers | **Built**: SRT-08 (return period and exception), SRT-09 (restocking fee, off by default), SRT-10 (exchange: SRT-04 (4) is now complete), PRT-04 (use supplier credit on bills), PFT-07 (rounding differences in net profit), EXP-04 (expenses only for Administrator and authorised Managers). See DESIGN_REVIEW §12 |
 | Everything else | Later phases per ROADMAP.md |

@@ -369,7 +369,7 @@ class CustomerAccountService
         // every sales return of a named customer is on the account once (and reversed once when cancelled); store credit is a receipt in the
         // "Customer Credit" method with no ledger line of its own, which is why the receipt check above leaves it out
         foreach (DB::select("SELECT * FROM (
-                                SELECT r.return_no, r.status, r.total,
+                                SELECT r.return_no, r.status, (r.total - r.restocking_fee) AS total,
                                        COALESCE((SELECT SUM(l.credit) FROM customer_ledger_entries l WHERE l.entry_type = 'sale_return' AND l.source_type = 'sale_return' AND l.source_id = r.id), 0) AS booked,
                                        COALESCE((SELECT SUM(l.debit) FROM customer_ledger_entries l WHERE l.entry_type = 'sale_return_void' AND l.source_type = 'sale_return' AND l.source_id = r.id), 0) AS reversed
                                   FROM sale_returns r JOIN customers c ON c.id = r.customer_id WHERE c.is_walk_in = 0) t

@@ -99,11 +99,12 @@ class FinanceReports
             $line('Stock lost (or found) in adjustments', Decimal::neg($p['stock_losses'], 2), 'at cost; opening stock is not counted'),
             $line('Service parts written off', Decimal::neg($p['service_written_off'], 2), 'parts taken off a job and thrown away'),
             $line('Difference on goods sent back to suppliers', $p['supplier_difference'], 'credit received less the cost of the stock that left'),
+            $line('Rounding differences on invoices', $p['rounding'], 'the shop gained when a total was rounded up and gave away when it was rounded down; prices and costs are never changed'),
             $line('NET PROFIT', $p['net_profit'], '', true),
         ];
         $periods = [];
         foreach ($this->profit->grouped($f->from, $f->to, $f->group) as $r) {
-            $other = Decimal::sub(Decimal::add(Decimal::add($r['expenses'], $r['stock_losses'], 2), $r['service_written_off'], 2), $r['supplier_difference'], 2);
+            $other = Decimal::sub(Decimal::sub(Decimal::add(Decimal::add($r['expenses'], $r['stock_losses'], 2), $r['service_written_off'], 2), $r['supplier_difference'], 2), $r['rounding'], 2);
             $periods[] = [
                 'period' => $r['label'], 'product_sales' => $r['sales_net'], 'service' => $r['service_revenue'], 'revenue' => $r['total_revenue'], 'cost' => $r['total_cost'],
                 'gross' => $r['gross_profit'], 'other' => $other, 'net' => $r['net_profit'],
@@ -117,7 +118,7 @@ class FinanceReports
                 $this->col('cost', 'Cost', 'money'), $this->col('gross', 'Gross profit', 'money'), $this->col('other', 'Expenses and losses', 'money'), $this->col('net', 'Net profit', 'money'),
             ], $periods, [
                 'period' => 'Total', 'product_sales' => $p['sales_net'], 'service' => $p['service_revenue'], 'revenue' => $p['total_revenue'], 'cost' => $p['total_cost'], 'gross' => $p['gross_profit'],
-                'other' => Decimal::sub(Decimal::add(Decimal::add($p['expenses'], $p['stock_losses'], 2), $p['service_written_off'], 2), $p['supplier_difference'], 2), 'net' => $p['net_profit'],
+                'other' => Decimal::sub(Decimal::sub(Decimal::add(Decimal::add($p['expenses'], $p['stock_losses'], 2), $p['service_written_off'], 2), $p['supplier_difference'], 2), $p['rounding'], 2), 'net' => $p['net_profit'],
             ])
             ->note('Cancelled invoices, returns, expenses and jobs never count. Tax is never revenue. Each cost is the cost recorded when the sale or job happened. Service jobs count on the day they were delivered and invoiced.');
     }
@@ -129,7 +130,7 @@ class FinanceReports
         $s = DB::selectOne("SELECT COUNT(*) AS invoices, COALESCE(SUM(grand_total), 0) AS total, COALESCE(SUM(tax_total), 0) AS tax, COALESCE(SUM(line_discount_total + invoice_discount_amount), 0) AS discounts
                               FROM sales WHERE status = 'completed' AND sale_date >= ? AND sale_date < ?", [$f->start(), $f->endExclusive()]);
         $cancelled = (int) DB::selectOne("SELECT COUNT(*) AS n FROM sales WHERE status = 'voided' AND sale_date >= ? AND sale_date < ?", [$f->start(), $f->endExclusive()])->n;
-        $returns = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ?", [$f->start(), $f->endExclusive()]);
+        $returns = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(total - restocking_fee), 0) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ?", [$f->start(), $f->endExclusive()]);
         $jobs = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS total FROM service_jobs WHERE status = 'delivered' AND invoiced_at >= ? AND invoiced_at < ?", [$f->start(), $f->endExclusive()]);
         $purchases = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS total FROM purchases WHERE status = 'received' AND purchase_date >= ? AND purchase_date < ?", [$f->start(), $f->endExclusive()]);
         $expenses = DB::selectOne("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE status = 'posted' AND expense_date >= ? AND expense_date < ?", [$f->from, $f->endExclusive()]);
@@ -143,7 +144,6 @@ class FinanceReports
             $r('Goods returned by customers', (int) $returns->n, $returns->total),
             $r('Service jobs delivered', (int) $jobs->n, $jobs->total),
             $r('Purchases received', (int) $purchases->n, $purchases->total),
-            $r('Expenses', (int) $expenses->n, $expenses->total),
         ];
 
         $result = (new ReportResult('Closing summary', $f->label()))
@@ -159,6 +159,8 @@ class FinanceReports
             ['label' => 'Gross profit', 'amount' => $p['gross_profit']],
             ['label' => 'Net profit (after expenses and losses)', 'amount' => $p['net_profit']],
         ]);
+
+        $result->table('Expenses', [$this->col('label', 'What', 'text', 'expenses.view'), $this->col('count', 'Count', 'int', 'expenses.view'), $this->col('amount', 'Amount', 'money', 'expenses.view')], [$r('Expenses recorded', (int) $expenses->n, $expenses->total)]);
 
         return $result->note('Count the cash in the drawer against the "Net movement" of the Cash row. Cancelled invoices are listed so that none disappears unnoticed.');
     }

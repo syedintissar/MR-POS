@@ -101,7 +101,7 @@ class SaleAccountService
         // what each invoice says was returned is what its posted returns add up to
         foreach (DB::select("SELECT * FROM (
                                 SELECT s.invoice_no, s.returned_amount,
-                                       COALESCE((SELECT SUM(r.total) FROM sale_returns r WHERE r.sale_id = s.id AND r.status = 'posted'), 0) AS real_returned
+                                       COALESCE((SELECT SUM(r.total - r.restocking_fee) FROM sale_returns r WHERE r.sale_id = s.id AND r.status = 'posted'), 0) AS real_returned
                                   FROM sales s) t
                               WHERE ABS(returned_amount - real_returned) > 0.004") as $r) {
             $problems[] = "Invoice {$r->invoice_no}: it says {$r->returned_amount} was returned but its returns add up to {$r->real_returned}.";

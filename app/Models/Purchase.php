@@ -39,6 +39,11 @@ class Purchase extends Model
         return $this->hasMany(PurchaseItem::class)->orderBy('id');
     }
 
+    public function creditApplications(): HasMany
+    {
+        return $this->hasMany(SupplierCreditApplication::class)->orderBy('id');
+    }
+
     public function returns(): HasMany
     {
         return $this->hasMany(PurchaseReturn::class)->orderBy('id');

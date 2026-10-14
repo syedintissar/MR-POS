@@ -55,6 +55,10 @@ class VoidPurchase
                 throw new DomainException("{$locked->label()} has goods returned to the supplier, so it cannot be cancelled. Cancel the return first.");
             }
 
+            if (DB::table('supplier_credit_applications')->where('purchase_id', $locked->id)->where('status', 'posted')->exists()) {
+                throw new DomainException("{$locked->label()} has supplier credit used on it, so it cannot be cancelled. Cancel the use of credit first.");
+            }
+
             $this->inventory->lockProducts($items->pluck('product_id')->all());
 
             $paid = (string) $locked->paid_amount;

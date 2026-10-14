@@ -255,4 +255,45 @@ class ReturnConcurrencyTest extends BackupTestCase
         $this->assertSame('450.00', (string) $c->fresh()->getRawOriginal('balance'), '400 + 300 + 50 sold, 2 x 100 returned, 100 collected (the cancelled return counts for nothing)');
         $this->assertBooksAgree();
     }
+
+    // ---------------------------------------------------------------- exchanges and supplier credit
+
+    public function test_two_terminals_exchanging_the_same_units_cannot_both_succeed(): void
+    {
+        $sale = $this->sale('100', '3');
+        $other = $this->product('120');
+        $start = microtime(true) + 6;
+
+        $tally = $this->tally(array_map(
+            fn ($i) => $this->start('return_worker', ['exchange', (string) $start, (string) $this->managers[$i]->id, (string) $sale->id, '2', (string) $other->id]),
+            [0, 1, 2],   // three terminals each exchange 2 of the 3: only one can
+        ));
+
+        $this->assertSame(['OK' => 1, 'REFUSED' => 2], $tally, 'Got: '.json_encode($tally));
+        $this->assertSame('2.000', (string) $sale->items()->sole()->returned_quantity);
+        $this->assertSame(1, SaleReturn::query()->where('status', 'posted')->count());
+        $this->assertSame(2, Sale::query()->count(), 'the original and exactly one replacement');
+        $this->assertSame('49.000', (string) $other->fresh()->current_stock, 'one replacement unit left the shelf, not three');
+        $this->assertBooksAgree();
+    }
+
+    public function test_supplier_credit_pressed_by_two_people_at_once_is_used_once(): void
+    {
+        $paid = app(ReceivePurchase::class)->execute(app(SavePurchaseDraft::class)->execute([
+            'supplier_id' => ($supplier = Supplier::factory()->create())->id, 'purchase_date' => now()->toDateString(),
+            'lines' => [['product_id' => Product::factory()->create()->id, 'quantity' => '10', 'unit_cost' => '100']],
+        ], $this->manager), $this->manager, ['payment_method_id' => $this->cashId, 'amount' => '1000']);
+        app(CreatePurchaseReturn::class)->execute(['purchase_id' => $paid->id, 'lines' => [['purchase_item_id' => $paid->items()->sole()->id, 'quantity' => '3']], 'reason' => 'x'], $this->manager);   // 300 of credit
+        $bill = app(ReceivePurchase::class)->execute(app(SavePurchaseDraft::class)->execute([
+            'supplier_id' => $supplier->id, 'purchase_date' => now()->toDateString(), 'lines' => [['product_id' => Product::factory()->create()->id, 'quantity' => '3', 'unit_cost' => '100']],
+        ], $this->manager), $this->manager);   // 300 owed
+        $start = microtime(true) + 6;
+
+        $tally = $this->tally(array_map(fn ($i) => $this->start('return_worker', ['usecredit', (string) $start, (string) $this->managers[$i]->id, (string) $supplier->id]), [0, 1, 2]));
+
+        $this->assertSame(['OK' => 1, 'REFUSED' => 2], $tally, 'Got: '.json_encode($tally));
+        $this->assertSame('300.00', (string) DB::table('supplier_credit_applications')->where('status', 'posted')->sum('amount'), 'the 300 was used once, not three times');
+        $this->assertSame('0.00', (string) $bill->fresh()->due_amount);
+        $this->assertBooksAgree();
+    }
 }

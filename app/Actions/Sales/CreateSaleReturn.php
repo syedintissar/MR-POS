@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\DB;
  *  - the value of a line is what the customer actually paid for those units: their share of the line's net amount and tax, after both
  *    discounts, so nobody is ever given back more than they paid; returning the rest of a line takes whatever is left (no lost cents)
  *  - only lines marked "restock" put units back in stock, at the cost on the invoice line; the others are a write-off (SRT-06)
+ *  - the return period (setting `sales.return_days`, default 7): after it a return needs `sale_returns.override_period` and a written reason (audited)
+ *  - an optional restocking fee (settings; off by default) is kept out of the value; it can be waived. Everything below is about what is credited: the value less the fee
  *  - settlement order: 1. reduce what the customer still owes on the invoice; 2. the rest is handed back as money (`sale_returns.refund`)
  *    or left on the customer's account as store credit (named customers; setting `sales.store_credit_enabled`). The walk-in customer
  *    has no account, so for them it is always money back.
@@ -49,7 +51,7 @@ class CreateSaleReturn
 
     /**
      * @param  list<array{sale_item_id: int|string, quantity: string, condition?: string, restock?: bool|string|int}>  $lines
-     * @param  array{remainder?: string, refund_method_id?: int|string|null}  $settle  remainder: 'refund' | 'credit'
+     * @param  array{remainder?: string, refund_method_id?: int|string|null, waive_fee?: bool, exception_reason?: string|null}  $settle  remainder: 'refund' | 'credit'
      */
     public function execute(Sale $sale, array $lines, array $settle, string $reason, User $by): SaleReturn
     {
@@ -76,6 +78,21 @@ class CreateSaleReturn
             $locked = Sale::query()->whereKey($sale->getKey())->lockForUpdate()->firstOrFail();
             if ($locked->isVoided()) {
                 throw new DomainException("{$locked->invoice_no} has been cancelled: nothing can be returned against it.");
+            }
+
+            // the return period: after it only someone with the permission may allow the return, and must say why
+            $exception = null;
+            $days = (int) $this->settings->get('sales.return_days');
+            if ($days > 0 && $locked->sale_date->copy()->startOfDay()->addDays($days)->lt(now()->startOfDay())) {
+                $age = (int) $locked->sale_date->copy()->startOfDay()->diffInDays(now()->startOfDay());
+                if (! $by->can('sale_returns.override_period')) {
+                    throw new DomainException("{$locked->invoice_no} is {$age} days old: goods can only be returned within {$days} days. A manager can allow an exception.");
+                }
+                $exception = trim((string) ($settle['exception_reason'] ?? ''));
+                if (mb_strlen($exception) < 3) {
+                    throw new DomainException("The return period of {$days} days has passed ({$locked->invoice_no} is {$age} days old). Write the reason for allowing this return.");
+                }
+                $exception = mb_substr($exception, 0, 255);
             }
 
             $ids = array_map(fn ($l) => (int) $l['sale_item_id'], $lines);
@@ -129,11 +146,23 @@ class CreateSaleReturn
                 throw new DomainException('These items were given away free, so there is nothing to return money for.');
             }
 
+            // the restocking fee (off by default): a share of the value without tax that the shop keeps; what goes back to the customer is the value less the fee
+            $fee = '0.00';
+            $feeWaived = false;
+            if ($this->settings->bool('sales.restocking_fee_enabled')) {
+                if (! empty($settle['waive_fee'])) {
+                    $feeWaived = true;
+                } else {
+                    $fee = Decimal::round(Decimal::div(Decimal::mul($net, (string) $this->settings->get('sales.restocking_fee_percent'), 4), '100', 4), 2);
+                    $fee = Decimal::cmp($fee, $net) > 0 ? $net : $fee;
+                }
+            }
+            $credited = Decimal::sub($total, $fee, 2);
+
             // 1. what the customer still owes on the invoice is reduced first (named customers only: the walk-in customer owes nothing)
             $due = $customer->is_walk_in ? '0.00' : Decimal::nonNegative((string) $locked->due_amount, 2);
-            $applied = Decimal::cmp($total, $due) < 0 ? $total : $due;
-            $remainder = Decimal::sub($total, $applied, 2);
-
+            $applied = Decimal::cmp($credited, $due) < 0 ? $credited : $due;
+            $remainder = Decimal::sub($credited, $applied, 2);
             // 2. the rest: money back, or store credit
             $mode = (string) ($settle['remainder'] ?? '');
             $refund = '0.00';
@@ -167,7 +196,7 @@ class CreateSaleReturn
             $return = new SaleReturn;
             $return->forceFill([
                 'return_no' => $this->numbers->next('sale_return'), 'sale_id' => $locked->id, 'customer_id' => $customer->id, 'return_date' => now(),
-                'net_total' => $net, 'tax_total' => $tax, 'total' => $total, 'applied_to_due' => $applied, 'refund_amount' => $refund, 'store_credit_amount' => $credit,
+                'net_total' => $net, 'tax_total' => $tax, 'total' => $total, 'restocking_fee' => $fee, 'period_exception_reason' => $exception, 'applied_to_due' => $applied, 'refund_amount' => $refund, 'store_credit_amount' => $credit,
                 'reason' => mb_substr($reason, 0, 255), 'status' => SaleReturn::POSTED, 'created_by' => $by->id,
             ])->save();
 
@@ -191,12 +220,12 @@ class CreateSaleReturn
                 }
             }
 
-            $locked->forceFill(['returned_amount' => Decimal::add((string) $locked->returned_amount, $total, 2)])->save();
+            $locked->forceFill(['returned_amount' => Decimal::add((string) $locked->returned_amount, $credited, 2)])->save();
             $this->sales->refreshSale($locked);
 
             // the customer's account
             if (! $customer->is_walk_in) {
-                $this->accounts->postEntry($customer, 'sale_return', '0', $total, $return, "Return {$return->return_no} against {$locked->invoice_no}", $by);
+                $this->accounts->postEntry($customer, 'sale_return', '0', $credited, $return, "Return {$return->return_no} against {$locked->invoice_no}".(Decimal::isPositive($fee) ? " (restocking fee {$fee} kept)" : ''), $by);
             }
             if (Decimal::isPositive($refund)) {
                 $payment = $this->payment($customer, $method, 'refund', $refund, "Refund for return {$return->return_no}", $by);
@@ -214,10 +243,17 @@ class CreateSaleReturn
             }
 
             $this->audit->log('sale_return_created', 'sales', "Return {$return->return_no} of {$total} against {$locked->invoice_no}", $return, new: [
-                'invoice' => $locked->invoice_no, 'customer' => $customer->name, 'total' => $total, 'applied_to_due' => $applied, 'refund' => $refund, 'store_credit' => $credit,
+                'invoice' => $locked->invoice_no, 'customer' => $customer->name, 'total' => $total, 'restocking_fee' => $fee, 'fee_waived' => $feeWaived, 'credited' => $credited,
+                'applied_to_due' => $applied, 'refund' => $refund, 'store_credit' => $credit, 'period_exception' => $exception,
                 'lines' => array_map(fn ($b) => ['product' => $b['item']->product_name, 'quantity' => $b['qty'], 'condition' => $b['condition'], 'restock' => $b['restock'], 'value' => Decimal::add($b['net'], $b['tax'], 2)], $built),
                 'reason' => $reason,
             ], user: $by);
+
+            if ($exception !== null) {
+                $this->audit->log('sale_return_period_exception', 'sales', "Return {$return->return_no} against {$locked->invoice_no} allowed after the {$days}-day return period: {$exception}", $return, new: [
+                    'invoice' => $locked->invoice_no, 'return_period_days' => $days, 'reason' => $exception, 'total' => $total,
+                ], user: $by);
+            }
 
             return $return->refresh()->load('items');
         }, 3);

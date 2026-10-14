@@ -194,7 +194,7 @@ class UserManagementTest extends TestCase
         $this->actingAs($admin)->withSession($this->confirmed())->put("/admin/roles/{$adminRole->id}", ['permissions' => ['products.view']])->assertStatus(422);
         $this->delete("/admin/roles/{$cashierRole->id}")->assertStatus(422);
 
-        $this->assertCount(91, $adminRole->fresh()->permissions);
+        $this->assertCount(92, $adminRole->fresh()->permissions);
         $this->assertNotNull(Role::findByName('Cashier'));
     }
 

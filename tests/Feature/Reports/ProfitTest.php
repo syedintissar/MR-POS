@@ -160,6 +160,28 @@ class ProfitTest extends TestCase
         $this->assertSame($before, $this->profit()->summary($this->today(), $this->today())['gross_profit']);
     }
 
+    public function test_rounding_differences_are_in_net_profit_only_and_prices_and_costs_stay_as_they_are(): void
+    {
+        app(SettingsService::class)->set('sales.round_to', '10');
+        $a = $this->stocked('50', '700', ['sale_price' => '1234']);
+        $b = $this->stocked('50', '700', ['sale_price' => '1237']);
+        $down = $this->sell([['product_id' => $a->id, 'quantity' => '1']]);   // 1234 is rounded down to 1230: -4
+        $up = $this->sell([['product_id' => $b->id, 'quantity' => '1']]);     // 1237 is rounded up to 1240: +3
+
+        $p = $this->profit()->summary($this->today(), $this->today());
+
+        $this->assertSame(['1230.00', '1240.00'], [$down->grand_total, $up->grand_total]);
+        $this->assertSame('-1.00', $p['rounding'], '-4 and +3');
+        $this->assertSame('2471.00', $p['sales_revenue'], 'revenue is the prices, not the rounded totals');
+        $this->assertSame('1071.00', $p['gross_profit'], '2471 less 1400 of cost: rounding is not in gross profit');
+        $this->assertSame('1070.00', $p['net_profit'], 'it is in net profit');
+        $this->assertSame(['1234.00', '700.0000'], [$down->items()->sole()->unit_price, $down->items()->sole()->unit_cost], 'the price and the cost on the invoice are untouched');
+        $this->assertSame('1234.00', $a->fresh()->sale_price);
+
+        $day = $this->profit()->grouped($this->today(), $this->today(), 'day')[0];
+        $this->assertSame(['-1.00', '1070.00'], [$day['rounding'], $day['net_profit']]);
+    }
+
     public function test_the_period_is_inclusive_and_other_days_are_left_out(): void
     {
         $a = $this->stocked('50', '100', ['sale_price' => '150']);

@@ -30,6 +30,7 @@ use App\Http\Controllers\ServiceJobWorkController;
 use App\Http\Controllers\ServiceTypeController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierCreditController;
 use App\Http\Controllers\SupplierPaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -250,6 +251,8 @@ Route::middleware('auth')->group(function () {
         Route::middleware('can:sale_returns.create')->group(function () {
             Route::get('create', [SaleReturnController::class, 'create'])->name('create');
             Route::post('sales/{sale}', [SaleReturnController::class, 'store'])->whereNumber('sale')->name('store');
+            Route::get('products', [SaleReturnController::class, 'products'])->name('products');
+            Route::post('sales/{sale}/exchange', [SaleReturnController::class, 'exchange'])->whereNumber('sale')->name('exchange');
         });
         Route::get('{saleReturn}', [SaleReturnController::class, 'show'])->whereNumber('saleReturn')->middleware('can:sale_returns.view')->name('show');
         Route::post('{saleReturn}/void', [SaleReturnController::class, 'voidReturn'])->whereNumber('saleReturn')->middleware(['can:sales.void', 'password.confirm'])->name('void');
@@ -277,6 +280,11 @@ Route::middleware('auth')->group(function () {
         Route::get('{report}/print', [ReportController::class, 'print'])->where('report', '[a-z\-]+')->name('print');
         Route::get('{report}/export/{format}', [ReportController::class, 'export'])->where('report', '[a-z\-]+')->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('export');
     });
+
+    // Supplier credit (left over from goods sent back): use it on bills, or take a use back
+    Route::post('suppliers/{supplier}/use-credit', [SupplierCreditController::class, 'applyToSupplier'])->whereNumber('supplier')->middleware('can:supplier_payments.create')->name('suppliers.use-credit');
+    Route::post('purchases/{purchase}/use-credit', [SupplierCreditController::class, 'applyToBill'])->whereNumber('purchase')->middleware('can:supplier_payments.create')->name('purchases.use-credit');
+    Route::post('supplier-credit/{application}/void', [SupplierCreditController::class, 'voidUse'])->whereNumber('application')->middleware(['can:supplier_payments.void', 'password.confirm'])->name('supplier-credit.void');
 
     // ---- Phase 4: purchases and supplier accounts -----------------------------------------------------------
 

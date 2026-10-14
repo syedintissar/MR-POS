@@ -49,6 +49,9 @@ class VoidPurchaseReturn
             if ($locked->isVoided()) {
                 throw new DomainException("{$locked->return_no} has already been cancelled.");
             }
+            if (DB::table('supplier_credit_applications')->where('purchase_return_id', $locked->id)->where('status', 'posted')->exists()) {
+                throw new DomainException("The credit of {$locked->return_no} has already been used on a bill, so the return cannot be cancelled. Cancel those uses of credit first.");
+            }
             $purchase = $locked->purchase_id ? Purchase::query()->whereKey($locked->purchase_id)->lockForUpdate()->firstOrFail() : null;
             $rows = $locked->items()->orderBy('id')->get();
             PurchaseItem::query()->whereIn('id', $rows->pluck('purchase_item_id')->filter())->orderBy('id')->lockForUpdate()->get();

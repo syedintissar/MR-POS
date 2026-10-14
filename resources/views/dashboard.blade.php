@@ -97,11 +97,13 @@
                         <div class="text-xs text-slate-500">{{ $now['purchase_count'] }} bill(s) received</div>
                         <div class="mt-1 text-xs">{!! $chip($now['purchases'], $before['purchases']) !!}</div>
                     </div>
-                    <div class="card card-body">
-                        <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Expenses</div>
-                        <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['expenses']) }}</div>
-                        <div class="mt-1 text-xs">{!! $chip($now['expenses'], $before['expenses']) !!}</div>
-                    </div>
+                    @can('expenses.view')
+                        <div class="card card-body">
+                            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Expenses</div>
+                            <div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($now['expenses']) }}</div>
+                            <div class="mt-1 text-xs">{!! $chip($now['expenses'], $before['expenses']) !!}</div>
+                        </div>
+                    @endcan
                 @endif
                 @if($withProfit)
                     <div class="card card-body">

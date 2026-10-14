@@ -107,12 +107,15 @@ class SupplierAccountService
             ->join('supplier_payments as sp', 'sp.id', '=', 'pp.supplier_payment_id')
             ->where('pp.purchase_id', $purchase->id)->where('sp.status', 'posted')->sum('pp.amount') ?: '0'), 2);
 
-        $due = Decimal::nonNegative(Decimal::sub(Decimal::sub((string) $purchase->grand_total, (string) $purchase->returned_amount, 2), $paid, 2), 2);
+        // supplier credit used on this bill pays it too (no money moves: the supplier's balance already said the shop was owed it)
+        $credit = Decimal::round((string) (DB::table('supplier_credit_applications')->where('purchase_id', $purchase->id)->where('status', 'posted')->sum('amount') ?: '0'), 2);
+
+        $due = Decimal::nonNegative(Decimal::sub(Decimal::sub(Decimal::sub((string) $purchase->grand_total, (string) $purchase->returned_amount, 2), $paid, 2), $credit, 2), 2);
 
         $purchase->forceFill([
             'paid_amount' => $paid,
             'due_amount' => $due,
-            'payment_status' => Purchase::paymentStatusFor($due, $paid),
+            'payment_status' => Purchase::paymentStatusFor($due, Decimal::add($paid, $credit, 2)),
         ])->saveQuietly();
 
         return $purchase;
@@ -150,6 +153,29 @@ class SupplierAccountService
         return ['opening' => $opening, 'rows' => $rows, 'debit' => $debit, 'credit' => $credit, 'closing' => $running];
     }
 
+    /**
+     * Credit the supplier holds for the shop, from goods sent back: what each posted return left as credit less what was already used,
+     * oldest return first. A plain read: callers that change anything lock the supplier (and these returns) first.
+     *
+     * @return list<array{return_id: int, return_no: string, left: string}>
+     */
+    public function creditSources(int $supplierId): array
+    {
+        $out = [];
+        foreach (DB::select("SELECT r.id, r.return_no, r.credit_amount - COALESCE((SELECT SUM(a.amount) FROM supplier_credit_applications a WHERE a.purchase_return_id = r.id AND a.status = 'posted'), 0) AS left_amount
+                               FROM purchase_returns r WHERE r.supplier_id = ? AND r.status = 'posted' AND r.credit_amount > 0
+                              HAVING left_amount > 0 ORDER BY r.return_date, r.id", [$supplierId]) as $r) {
+            $out[] = ['return_id' => (int) $r->id, 'return_no' => $r->return_no, 'left' => Decimal::round((string) $r->left_amount, 2)];
+        }
+
+        return $out;
+    }
+
+    public function creditAvailable(int $supplierId): string
+    {
+        return array_reduce($this->creditSources($supplierId), fn ($c, $s) => Decimal::add($c, $s['left'], 2), '0.00');
+    }
+
     /** Money we have paid a supplier that is not (or no longer) settling any bill. */
     public function advanceFor(int $supplierId): string
     {
@@ -182,14 +208,15 @@ class SupplierAccountService
 
         $paid = "COALESCE((SELECT SUM(pp.amount) FROM purchase_payments pp JOIN supplier_payments sp ON sp.id = pp.supplier_payment_id
                             WHERE pp.purchase_id = p.id AND sp.status = 'posted'), 0)";
-        foreach (DB::select("SELECT p.id, p.purchase_no, p.paid_amount, p.due_amount, p.grand_total, p.returned_amount, p.status, p.payment_status, {$paid} AS real_paid
+        $used = "COALESCE((SELECT SUM(ca.amount) FROM supplier_credit_applications ca WHERE ca.purchase_id = p.id AND ca.status = 'posted'), 0)";
+        foreach (DB::select("SELECT p.id, p.purchase_no, p.paid_amount, p.due_amount, p.grand_total, p.returned_amount, p.status, p.payment_status, {$paid} AS real_paid, {$used} AS credit_used
                                FROM purchases p WHERE p.status <> 'draft'") as $r) {
             if ($r->status === 'voided') {
                 $ok = bccomp((string) $r->paid_amount, '0', 2) === 0 && bccomp((string) $r->due_amount, '0', 2) === 0;
             } else {
-                $due = max(0, (float) $r->grand_total - (float) $r->returned_amount - (float) $r->real_paid);
+                $due = max(0, (float) $r->grand_total - (float) $r->returned_amount - (float) $r->real_paid - (float) $r->credit_used);
                 $ok = abs((float) $r->paid_amount - (float) $r->real_paid) < 0.004 && abs((float) $r->due_amount - $due) < 0.004
-                    && $r->payment_status === Purchase::paymentStatusFor(number_format($due, 2, '.', ''), number_format((float) $r->real_paid, 2, '.', ''));
+                    && $r->payment_status === Purchase::paymentStatusFor(number_format($due, 2, '.', ''), number_format((float) $r->real_paid + (float) $r->credit_used, 2, '.', ''));
             }
             if (! $ok) {
                 $problems[] = "Purchase {$r->purchase_no}: paid / due / status do not match the payments recorded against it.";
@@ -210,6 +237,18 @@ class SupplierAccountService
                                FROM purchases p JOIN purchase_items pi ON pi.purchase_id = p.id
                               WHERE p.status = 'received' GROUP BY p.id, p.purchase_no HAVING ABS(bought - stocked) > 0.0005") as $r) {
             $problems[] = "Purchase {$r->purchase_no} lists {$r->bought} units but only {$r->stocked} went into stock.";
+        }
+
+        // supplier credit: a return's uses never add up to more than the credit it left, a use belongs to the supplier of both its return and its bill,
+        // and a cancelled bill or return has no use standing
+        foreach (DB::select("SELECT r.return_no, r.credit_amount, COALESCE(SUM(a.amount), 0) AS used
+                               FROM purchase_returns r JOIN supplier_credit_applications a ON a.purchase_return_id = r.id AND a.status = 'posted'
+                              GROUP BY r.id, r.return_no, r.credit_amount HAVING used > r.credit_amount + 0.004") as $r) {
+            $problems[] = "Return {$r->return_no} left {$r->credit_amount} of credit but {$r->used} of it was used.";
+        }
+        foreach (DB::select("SELECT a.id FROM supplier_credit_applications a JOIN purchase_returns r ON r.id = a.purchase_return_id JOIN purchases p ON p.id = a.purchase_id
+                              WHERE a.status = 'posted' AND (r.supplier_id <> a.supplier_id OR p.supplier_id <> a.supplier_id OR r.status <> 'posted' OR p.status <> 'received')") as $r) {
+            $problems[] = "A use of supplier credit (#{$r->id}) does not match its supplier, its return or its bill.";
         }
 
         // what each bill says was sent back is what its posted returns add up to, line by line

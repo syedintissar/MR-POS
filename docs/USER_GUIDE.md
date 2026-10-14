@@ -193,7 +193,7 @@ Open **Sales returns → Take goods back** (or **Return items** on an invoice; o
 
 ## 8. Expenses
 **Money → Expenses → Record an expense:** choose the category (Rent, Electricity, Salary, Internet, Transport, Maintenance, Tea / Refreshments, Office expense, Miscellaneous, or one you add under *Categories*), the date (not in the future), the amount, how it was paid, who was paid and what it was for. You can attach a photo or PDF of the bill (up to 5 MB); it is kept privately and opens only for people who may see expenses. The expense gets a number (EXP-000123).
-You can **correct an expense only on the day it was entered** (managers); after that it can only be **cancelled** (reason and password) and entered again. A cancelled expense stays in the list but no longer counts anywhere. Cashiers can record expenses and see the list; they cannot correct or cancel.
+You can **correct an expense only on the day it was entered** (managers); after that it can only be **cancelled** (reason and password) and entered again. A cancelled expense stays in the list but no longer counts anywhere. Expenses are for administrators and authorised managers only: **cashiers and technicians do not see this part of the system at all** (an administrator can give the permission to a role under Roles & permissions).
 
 ## 9. Reports & dashboard
 ### The dashboard
@@ -264,3 +264,10 @@ Shows whether the computer has everything it needs: PHP features, the database v
 - **Every morning:** look at the dashboard. If there is a red or amber backup message, open *Backups* and read it.
 - **Every week:** swap the USB backup drive (take the newer one home). Confirm the second copy shows as *success*.
 - **After any change to the computer or network:** run *Backup Now* and then *Test restore*.
+
+### Return period, restocking fee, exchange and supplier credit (Phase 8b)
+* **Return period.** Goods can be taken back within **7 days** of the invoice (the Administrator can change this in Settings → Sales; 0 means no limit). After that the return page says so; a manager can still allow it by writing the **reason** (it is recorded on the return and in the audit log). Someone without that right is told to ask a manager.
+* **Restocking fee.** Off by default. When the Administrator switches it on (Settings → Sales) a percentage of the goods' value (without tax) is kept by the shop; the return page shows it and lets you **waive** it. The customer is credited the value less the fee.
+* **Exchange.** On an invoice press *Return items*, then **Exchange for other items instead**. Choose what comes back, search the new items, and settle: a named customer's credit from the return pays for the new items (they pay only the difference, or keep what is left as store credit), or choose to hand the returned money back and charge the new items in full (the walk-in customer is always settled this way; the screen shows the net amount to collect or hand back). **It is one step: if anything fails, nothing at all is recorded.** Both receipts print; the two documents show each other. To undo an exchange, cancel the new invoice first, then the return.
+* **Supplier credit.** When goods go back to a supplier for a bill that is already paid, the credit stays with the supplier. On the supplier's page (or on a bill) press **Use supplier credit**: it is taken off the open bills, oldest first, and **cannot be used twice**. Every use is listed; a manager can take one back (password and reason). A bill with credit used on it, or a return whose credit was used, cannot be cancelled until the use is taken back.
+* **Rounding.** If you round invoice totals, the difference is shown on its own line in the profit report and counts in **net** profit only.

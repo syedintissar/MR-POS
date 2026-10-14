@@ -72,7 +72,7 @@ class SettingsTest extends TestCase
         $admin = $this->admin();
 
         $this->actingAs($admin)->put('/admin/settings/sales', [
-            'sales_max_discount_percent' => '10', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '5',
+            'sales_max_discount_percent' => '10', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '5', 'sales_return_days' => 7, 'sales_restocking_fee_enabled' => 0, 'sales_restocking_fee_percent' => '10.00',
         ])->assertRedirect();
 
         $row = DB::table('audit_logs')->where('event', 'settings_changed')->latest('id')->first();
@@ -88,7 +88,7 @@ class SettingsTest extends TestCase
         $before = DB::table('audit_logs')->where('event', 'settings_changed')->count();
 
         $this->actingAs($admin)->put('/admin/settings/sales', [
-            'sales_max_discount_percent' => '5.00', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '0',
+            'sales_max_discount_percent' => '5.00', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '0', 'sales_return_days' => 7, 'sales_restocking_fee_enabled' => 0, 'sales_restocking_fee_percent' => '10.00',
         ]);
 
         $this->assertSame($before, DB::table('audit_logs')->where('event', 'settings_changed')->count());

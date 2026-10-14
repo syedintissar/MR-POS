@@ -20,7 +20,7 @@ class SaleReturn extends Model
     protected function casts(): array
     {
         return [
-            'return_date' => 'datetime', 'voided_at' => 'datetime', 'net_total' => 'decimal:2', 'tax_total' => 'decimal:2', 'total' => 'decimal:2',
+            'return_date' => 'datetime', 'voided_at' => 'datetime', 'net_total' => 'decimal:2', 'tax_total' => 'decimal:2', 'total' => 'decimal:2', 'restocking_fee' => 'decimal:2',
             'applied_to_due' => 'decimal:2', 'refund_amount' => 'decimal:2', 'store_credit_amount' => 'decimal:2',
         ];
     }
@@ -33,6 +33,11 @@ class SaleReturn extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class)->withTrashed();
+    }
+
+    public function exchangeSale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class, 'exchange_sale_id');
     }
 
     public function items(): HasMany

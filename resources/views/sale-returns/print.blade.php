@@ -66,6 +66,8 @@
 
     <div class="sep"></div>
     <div class="row total"><span>RETURNED</span><span>{{ Money::symbol() }} {{ Money::format($return->total) }}</span></div>
+    @if((float) $return->restocking_fee)<div class="row"><span>Restocking fee kept</span><span>- {{ Money::format($return->restocking_fee) }}</span></div>@endif
+    @if($return->exchangeSale)<div class="small">Exchanged for invoice {{ $return->exchangeSale->invoice_no }}</div>@endif
     @if((float) $return->applied_to_due)<div class="row"><span>Taken off amount owed</span><span>{{ Money::format($return->applied_to_due) }}</span></div>@endif
     @if((float) $return->refund_amount)<div class="row b"><span>Money back{{ $return->refundPayment?->method ? ' ('.$return->refundPayment->method->name.')' : '' }}</span><span>{{ Money::format($return->refund_amount) }}</span></div>@endif
     @if((float) $return->store_credit_amount)<div class="row b"><span>Store credit</span><span>{{ Money::format($return->store_credit_amount) }}</span></div>@endif

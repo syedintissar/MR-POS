@@ -32,7 +32,7 @@ class SalesReports
         }
         $returns = [];
         $rb = Periods::sql('r.return_date', $f->group);
-        foreach (DB::select("SELECT {$rb} AS b, SUM(r.total) AS total FROM sale_returns r WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY b", [$f->start(), $f->endExclusive()]) as $r) {
+        foreach (DB::select("SELECT {$rb} AS b, SUM(r.total - r.restocking_fee) AS total FROM sale_returns r WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY b", [$f->start(), $f->endExclusive()]) as $r) {
             $returns[(string) $r->b] = (string) $r->total;
         }
 
@@ -225,7 +225,7 @@ class SalesReports
                               WHERE s.status = 'completed' AND s.sale_date >= ? AND s.sale_date < ? GROUP BY c.id, c.name, c.is_walk_in", [$f->start(), $f->endExclusive()]) as $r) {
             $groups[$r->id] = ['customer' => $r->is_walk_in ? 'Walk-in customers' : $r->name, 'invoices' => (int) $r->invoices, 'total' => Decimal::round((string) $r->total, 2), 'returns' => '0.00', 'due' => Decimal::round((string) $r->due, 2)];
         }
-        foreach (DB::select("SELECT c.id, c.name, c.is_walk_in, SUM(r.total) AS total
+        foreach (DB::select("SELECT c.id, c.name, c.is_walk_in, SUM(r.total - r.restocking_fee) AS total
                                FROM sale_returns r JOIN customers c ON c.id = r.customer_id
                               WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY c.id, c.name, c.is_walk_in", [$f->start(), $f->endExclusive()]) as $r) {
             $groups[$r->id] ??= ['customer' => $r->is_walk_in ? 'Walk-in customers' : $r->name, 'invoices' => 0, 'total' => '0.00', 'returns' => '0.00', 'due' => '0.00'];
@@ -267,7 +267,7 @@ class SalesReports
             $g['average'] = $g['invoices'] > 0 ? Decimal::div($g['total'], (string) $g['invoices'], 2) : '0.00';
             $groups[(int) $r->id] = $g;
         }
-        foreach (DB::select("SELECT r.created_by AS id, u.name, SUM(r.total) AS total FROM sale_returns r LEFT JOIN users u ON u.id = r.created_by
+        foreach (DB::select("SELECT r.created_by AS id, u.name, SUM(r.total - r.restocking_fee) AS total FROM sale_returns r LEFT JOIN users u ON u.id = r.created_by
                               WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY r.created_by, u.name", [$f->start(), $f->endExclusive()]) as $r) {
             $groups[(int) $r->id] ??= $blank($r->name ?? 'Unknown');
             $groups[(int) $r->id]['returns'] = Decimal::round((string) $r->total, 2);
@@ -292,7 +292,7 @@ class SalesReports
     public function returns(ReportFilters $f): ReportResult
     {
         $status = $f->str('status');
-        $sql = 'SELECT r.id, r.return_no, r.return_date, r.reason, r.total, r.applied_to_due, r.refund_amount, r.store_credit_amount, r.status, s.invoice_no, c.name AS customer, c.is_walk_in,
+        $sql = 'SELECT r.id, r.return_no, r.return_date, r.reason, r.total, r.restocking_fee, r.applied_to_due, r.refund_amount, r.store_credit_amount, r.status, s.invoice_no, c.name AS customer, c.is_walk_in,
                        (SELECT COALESCE(SUM(ri.quantity), 0) FROM sale_return_items ri WHERE ri.sale_return_id = r.id) AS units
                   FROM sale_returns r JOIN sales s ON s.id = r.sale_id JOIN customers c ON c.id = r.customer_id
                  WHERE r.return_date >= ? AND r.return_date < ?';
@@ -307,17 +307,17 @@ class SalesReports
         }
 
         $rows = [];
-        $tot = ['return_no' => 'Total (not cancelled)', 'units' => '0.000', 'total' => '0.00', 'applied' => '0.00', 'refund' => '0.00', 'credit' => '0.00'];
+        $tot = ['return_no' => 'Total (not cancelled)', 'units' => '0.000', 'total' => '0.00', 'fee' => '0.00', 'applied' => '0.00', 'refund' => '0.00', 'credit' => '0.00'];
         foreach (DB::select($sql.' ORDER BY r.return_date, r.id', $args) as $r) {
             $rows[] = [
                 'return_no' => $r->return_no, 'date' => $r->return_date, 'invoice' => $r->invoice_no, 'customer' => $r->is_walk_in ? 'Walk-in customer' : $r->customer, 'reason' => $r->reason,
-                'units' => Decimal::round((string) $r->units, 3), 'total' => Decimal::round((string) $r->total, 2), 'applied' => Decimal::round((string) $r->applied_to_due, 2),
+                'units' => Decimal::round((string) $r->units, 3), 'total' => Decimal::round((string) $r->total, 2), 'fee' => Decimal::round((string) $r->restocking_fee, 2), 'applied' => Decimal::round((string) $r->applied_to_due, 2),
                 'refund' => Decimal::round((string) $r->refund_amount, 2), 'credit' => Decimal::round((string) $r->store_credit_amount, 2), 'status' => $r->status === 'voided' ? 'Cancelled' : 'Recorded',
                 '_href' => route('sale-returns.show', $r->id),
             ];
             if ($r->status === 'posted') {
                 $tot['units'] = Decimal::add($tot['units'], (string) $r->units, 3);
-                foreach (['total' => 'total', 'applied' => 'applied_to_due', 'refund' => 'refund_amount', 'credit' => 'store_credit_amount'] as $k => $src) {
+                foreach (['total' => 'total', 'fee' => 'restocking_fee', 'applied' => 'applied_to_due', 'refund' => 'refund_amount', 'credit' => 'store_credit_amount'] as $k => $src) {
                     $tot[$k] = Decimal::add($tot[$k], (string) $r->{$src}, 2);
                 }
             }
@@ -325,7 +325,7 @@ class SalesReports
 
         return (new ReportResult('Sales returns', $f->label()))->table(null, [
             $this->col('return_no', 'Return'), $this->col('date', 'Date', 'datetime'), $this->col('invoice', 'Invoice'), $this->col('customer', 'Customer'), $this->col('reason', 'Reason'),
-            $this->col('units', 'Units', 'qty'), $this->col('total', 'Value', 'money'), $this->col('applied', 'Off the debt', 'money'), $this->col('refund', 'Money back', 'money'),
+            $this->col('units', 'Units', 'qty'), $this->col('total', 'Value', 'money'), $this->col('fee', 'Fee kept', 'money'), $this->col('applied', 'Off the debt', 'money'), $this->col('refund', 'Money back', 'money'),
             $this->col('credit', 'Store credit', 'money'), $this->col('status', 'Status'),
         ], $rows, $tot);
     }
@@ -373,8 +373,8 @@ class SalesReports
 
         return (new ReportResult('Money in and out by payment method', $f->label()))->table(null, [
             $this->col('method', 'Method'), $this->col('received', 'Received from customers', 'money'), $this->col('suppliers_back', 'Received from suppliers', 'money'),
-            $this->col('refunded', 'Refunded to customers', 'money'), $this->col('suppliers_paid', 'Paid to suppliers', 'money'), $this->col('expenses', 'Expenses paid', 'money'),
-            $this->col('net', 'Net movement', 'money'),
+            $this->col('refunded', 'Refunded to customers', 'money'), $this->col('suppliers_paid', 'Paid to suppliers', 'money'), $this->col('expenses', 'Expenses paid', 'money', 'expenses.view'),
+            $this->col('net', 'Net movement', 'money', 'expenses.view'),
         ], $rows, $tot)->note('Customer credit is not money, so it is not listed. Cash sales are shown after change was given back.');
     }
 }

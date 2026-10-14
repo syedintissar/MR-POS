@@ -126,7 +126,7 @@ class AuditLogTest extends TestCase
         $user = User::factory()->withRole('Admin')->create();
 
         $this->actingAs($user)->withServerVariables(['REMOTE_ADDR' => '192.168.1.20'])->put('/admin/settings/sales', [
-            'sales_max_discount_percent' => '9', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '0',
+            'sales_max_discount_percent' => '9', 'sales_void_window_hours' => 24, 'sales_store_credit_enabled' => 1, 'sales_round_to' => '0', 'sales_return_days' => 7, 'sales_restocking_fee_enabled' => 0, 'sales_restocking_fee_percent' => '10.00',
         ]);
 
         $row = AuditLog::query()->where('event', 'settings_changed')->latest('id')->first();

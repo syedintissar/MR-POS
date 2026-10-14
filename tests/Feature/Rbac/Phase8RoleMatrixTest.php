@@ -40,11 +40,11 @@ class Phase8RoleMatrixTest extends TestCase
         $nobody = ['Admin' => false, 'Manager' => false, 'Cashier' => false, 'Technician' => false];
 
         $rows = [
-            // expenses: a cashier may look and record, a manager may correct, cancel and manage categories
-            ['GET', '/expenses', $notTech], ['GET', '/expenses?q=a&status=all', $notTech], ['GET', '/expenses/create', $notTech], ['POST', '/expenses', $notTech],
-            ['GET', '/expenses/{e}', $notTech], ['GET', '/expenses/{e}/attachment', $notTech],
+            // expenses: managers and administrators only (a cashier or technician cannot even look)
+            ['GET', '/expenses', $managers], ['GET', '/expenses?q=a&status=all', $managers], ['GET', '/expenses/create', $managers], ['POST', '/expenses', $managers],
+            ['GET', '/expenses/{e}', $managers], ['GET', '/expenses/{e}/attachment', $managers],
             ['GET', '/expenses/{e}/edit', $managers], ['PUT', '/expenses/{e}', $managers], ['POST', '/expenses/{e}/void', $managers],
-            ['GET', '/expenses/categories', $notTech], ['POST', '/expenses/categories', $managers], ['PUT', '/expenses/categories/{c}', $managers], ['POST', '/expenses/categories/{c}/toggle', $managers],
+            ['GET', '/expenses/categories', $managers], ['POST', '/expenses/categories', $managers], ['PUT', '/expenses/categories/{c}', $managers], ['POST', '/expenses/categories/{c}/toggle', $managers],
 
             // sales returns: a cashier may look and print a copy, a manager takes goods back and cancels returns
             ['GET', '/sale-returns', $notTech], ['GET', '/sale-returns?q=a&status=all', $notTech], ['GET', '/sale-returns/{sr}', $notTech],
@@ -130,7 +130,7 @@ class Phase8RoleMatrixTest extends TestCase
 
     public function test_the_default_roles_hold_exactly_the_documented_phase_8_permissions(): void
     {
-        $returns = ['sale_returns.view', 'sale_returns.create', 'sale_returns.refund', 'purchase_returns.view', 'purchase_returns.create'];
+        $returns = ['sale_returns.view', 'sale_returns.create', 'sale_returns.refund', 'sale_returns.override_period', 'purchase_returns.view', 'purchase_returns.create'];
         $expenses = ['expenses.view', 'expenses.create', 'expenses.edit', 'expenses.void'];
         $reports = ['reports.sales', 'reports.inventory', 'reports.purchases', 'reports.customers', 'reports.suppliers', 'reports.service', 'reports.expenses', 'reports.profit', 'reports.export'];
 
@@ -140,7 +140,7 @@ class Phase8RoleMatrixTest extends TestCase
         $this->assertSame(array_fill_keys([...$returns, ...$expenses, ...$reports], true), $can('Admin', [...$returns, ...$expenses, ...$reports]));
 
         $cashier = $can('Cashier', [...$returns, ...$expenses, ...$reports]);
-        $this->assertSame(['sale_returns.view', 'expenses.view', 'expenses.create'], array_keys(array_filter($cashier)), 'a cashier looks at returns and records expenses; nothing else of Phase 8');
+        $this->assertSame(['sale_returns.view'], array_keys(array_filter($cashier)), 'a cashier looks at returns; no expenses and nothing else of Phase 8');
 
         $this->assertSame([], array_keys(array_filter($can('Technician', [...$returns, ...$expenses, ...$reports]))), 'a technician has no Phase 8 permission at all');
     }

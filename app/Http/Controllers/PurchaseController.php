@@ -13,6 +13,7 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\Supplier;
+use App\Services\Purchasing\SupplierAccountService;
 use App\Services\SettingsService;
 use App\Support\Decimal;
 use DomainException;
@@ -87,7 +88,10 @@ class PurchaseController extends Controller
         $this->authorize('purchases.view');
         $purchase->load(['supplier', 'items.product.unit', 'creator', 'receiver', 'voider', 'allocations.payment.method', 'returns']);
 
-        return view('purchases.show', ['purchase' => $purchase, 'methods' => PaymentMethod::query()->forSuppliers()->get()]);
+        return view('purchases.show', [
+            'purchase' => $purchase->load(['creditApplications.purchaseReturn:id,return_no', 'creditApplications.creator:id,name']), 'methods' => PaymentMethod::query()->forSuppliers()->get(),
+            'creditAvailable' => $purchase->isReceived() ? app(SupplierAccountService::class)->creditAvailable((int) $purchase->supplier_id) : '0.00',
+        ]);
     }
 
     public function edit(Request $request, Purchase $purchase): View|RedirectResponse

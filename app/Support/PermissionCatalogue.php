@@ -46,6 +46,7 @@ final class PermissionCatalogue
                 'sale_returns.view' => 'View sales returns',
                 'sale_returns.create' => 'Create sales returns',
                 'sale_returns.refund' => 'Pay cash or bank refunds',
+                'sale_returns.override_period' => 'Take goods back after the return period has passed (with a reason)',
             ],
             'Customers' => [
                 'customers.view' => 'View customers',
@@ -203,7 +204,6 @@ final class PermissionCatalogue
                 'inventory.view',
                 'service_jobs.view_all', 'service_jobs.view_assigned', 'service_jobs.create', 'service_jobs.edit',
                 'service_jobs.assign', 'service_jobs.change_status', 'service_jobs.deliver',
-                'expenses.view', 'expenses.create',
             ],
             self::TECHNICIAN => [
                 'dashboard.view',

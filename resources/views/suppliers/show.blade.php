@@ -32,6 +32,53 @@
             <div class="card card-body"><div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Paid in total</div><div class="mt-1 text-2xl font-semibold text-slate-900">{{ Money::withSymbol($paidTotal) }}</div>@if((float) $advance > 0)<div class="text-xs text-blue-700">{{ Money::format($advance) }} not yet applied to a bill</div>@endif</div>
         </div>
 
+        @php $creditTotal = array_reduce($creditSources, fn ($c, $s) => bcadd($c, $s['left'], 2), '0.00'); @endphp
+        @if((float) $creditTotal > 0 || $creditUses->isNotEmpty())
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Supplier credit</h2>
+                    @can('supplier_payments.create')
+                        @if((float) $creditTotal > 0 && $bills->isNotEmpty())
+                            <form method="POST" action="{{ route('suppliers.use-credit', $supplier) }}" data-confirm="Use {{ Money::withSymbol($creditTotal) }} of {{ $supplier->name }}'s credit on the open bills, oldest first?" data-confirm-label="Use credit">@csrf<button class="btn btn-primary btn-sm">Use supplier credit</button></form>
+                        @endif
+                    @endcan
+                </div>
+                <div class="card-body space-y-3 text-sm">
+                    <p class="text-slate-600">
+                        @if((float) $creditTotal > 0)<strong>{{ Money::withSymbol($creditTotal) }}</strong> of credit is held for you ({{ collect($creditSources)->map(fn ($s) => $s['return_no'].': '.Money::format($s['left']))->implode(' · ') }}).
+                            @if($bills->isEmpty()) It can be used as soon as there is a bill to pay. @else Pressing the button takes it off the open bills, oldest first, and it can never be used twice. @endif
+                        @else None of the credit is left; every use is listed below. @endif
+                    </p>
+                    @if($creditUses->isNotEmpty())
+                        <div class="overflow-x-auto"><table class="table">
+                            <thead><tr><th>Date</th><th>Credit from</th><th>Used on</th><th class="text-right">Amount</th><th>By</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach($creditUses as $u)
+                                <tr class="{{ $u->isVoided() ? 'text-slate-400 line-through' : '' }}">
+                                    <td class="whitespace-nowrap">{{ $u->created_at->format('d M Y, H:i') }}</td>
+                                    <td class="font-mono text-xs">{{ $u->purchaseReturn->return_no }}</td>
+                                    <td class="font-mono text-xs">{{ $u->purchase->purchase_no }}</td>
+                                    <td class="text-right">{{ Money::format($u->amount) }}</td>
+                                    <td>{{ $u->creator?->name }}</td>
+                                    <td class="text-right no-underline">
+                                        @if($u->isVoided())<span class="badge badge-red">cancelled</span>
+                                        @else
+                                            @can('supplier_payments.void')
+                                                <form method="POST" action="{{ route('supplier-credit.void', $u) }}" class="flex items-center justify-end gap-1" data-confirm="Take this use of credit back? The bill will owe the amount again." data-confirm-label="Take back" data-danger="1">
+                                                    @csrf<input name="reason" required placeholder="Reason" class="input w-32 py-1 text-xs" aria-label="Reason for taking this use of credit back"><button class="btn btn-secondary btn-sm">Take back</button>
+                                                </form>
+                                            @endcan
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table></div>
+                    @endif
+                </div>
+            </div>
+        @endif
+
         @if($bills->isNotEmpty())
             <div class="card overflow-x-auto">
                 <div class="card-header"><h2 class="card-title">Bills still to pay</h2></div>

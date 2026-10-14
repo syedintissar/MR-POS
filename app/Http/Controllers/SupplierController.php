@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Actions\Purchasing\AdjustSupplierBalance;
 use App\Models\Purchase;
 use App\Models\Supplier;
+use App\Models\SupplierCreditApplication;
 use App\Models\SupplierPayment;
 use App\Services\AuditLogger;
 use App\Services\DocumentNumberService;
@@ -56,6 +57,8 @@ class SupplierController extends Controller
             'bills' => $bills,
             'owed' => $bills->reduce(fn ($c, $b) => Decimal::add($c, (string) $b->due_amount, 2), '0.00'),
             'advance' => $accounts->advanceFor($supplier->id),
+            'creditSources' => $accounts->creditSources($supplier->id),
+            'creditUses' => SupplierCreditApplication::query()->with(['purchase:id,purchase_no', 'purchaseReturn:id,return_no', 'creator:id,name'])->where('supplier_id', $supplier->id)->orderByDesc('id')->limit(15)->get(),
             'purchaseTotal' => (string) Purchase::query()->where('supplier_id', $supplier->id)->where('status', Purchase::RECEIVED)->sum('grand_total'),
             'paidTotal' => (string) SupplierPayment::query()->where('supplier_id', $supplier->id)->where('status', 'posted')->sum('amount'),
             'recentPayments' => SupplierPayment::query()->with('method:id,name')->where('supplier_id', $supplier->id)->orderByDesc('payment_date')->orderByDesc('id')->limit(8)->get(),

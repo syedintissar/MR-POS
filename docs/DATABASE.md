@@ -1093,3 +1093,29 @@ Sales and returns from `sales`, `sale_items`, `sale_returns`, `sale_return_items
 25. Every purchase's returned amount and every line's returned quantity equal what its posted returns add up to.
 26. A purchase return's lines add up to its header, the stock that left equals its lines (and came back when cancelled), and the supplier's account carries it exactly once (reversed once when cancelled).
 27. Every refund received from a supplier is on the supplier's account exactly once (reversed once when cancelled).
+
+## 15. Phase 8b implementation notes (the owner's decisions)
+
+Migration `2026_10_11_800000_phase8_owner_decisions` (additive; applied to the real `mrpos` database after a backup, `mrpos_2026-10-13_152155_manual.zip`).
+
+| Item | As built | Why |
+|---|---|---|
+| `sale_returns.restocking_fee` | `DECIMAL(15,2)` default 0, kept by the shop out of the value; `CHECK restocking_fee <= net_total` and **`applied_to_due + refund_amount + store_credit_amount = total − restocking_fee`** (the old check was replaced) | The customer is credited the value less the fee; the three ways of settling still add up exactly |
+| `sale_returns.period_exception_reason` | text, set only when the return period had passed and someone with `sale_returns.override_period` allowed it | Every exception names its reason (and is audited) |
+| `sale_returns.exchange_sale_id` | nullable link to the replacement sale of an exchange | An exchange's two documents point at each other; the return of an exchange is cancelled only after the replacement invoice |
+| `purchase_returns.applied_to_due`, `credit_amount`, `refund_amount` | how the credit was split; `CHECK` that the three add up to the total. Rows from before this change were back-filled (a return without a bill: all credit; with a bill: taken off the bill) | "Credit left with the supplier" is now a fact that can be used later |
+| `supplier_credit_applications` | one row per use of credit: supplier, the return it came from, the bill it paid, amount > 0, status `posted` / `voided` with who, when and why. Nothing is deleted | Credit is used exactly once and every use stays in the history |
+| Settings | `sales.return_days` (default 7; 0 = no limit), `sales.restocking_fee_enabled` (default off), `sales.restocking_fee_percent` (default 10, 0 to 50) | Administrator-configurable; the fee is off by default |
+| Permissions | new `sale_returns.override_period` (Manager; Administrator through the gate); the migration also takes `expenses.view` / `expenses.create` away from the Cashier role | See RBAC §12 |
+
+### Posting rules as implemented
+* **Restocking fee:** credited to the customer = value − fee (the ledger `sale_return` credit, `sales.returned_amount`, the cancellation and every report use this figure). Profit: the fee reduces the revenue given back (it is revenue the shop kept). The fee is a percentage of the **net value without tax** and can be waived on a return (audited).
+* **Return period:** an invoice may be returned against up to `sales.return_days` calendar days after its date (day 7 is still inside). After that `CreateSaleReturn` demands `sale_returns.override_period` and a reason.
+* **Exchange (`ExchangeSale`):** one outer transaction runs `CreateSaleReturn` and then `CompleteSale`, so every rule of both applies and any failure undoes both. Lock order: customer (named; first read) → invoice → its lines → all products of both halves (one sorted list) → sequences → audit. `CompleteSale::quote()` (the same pricing code the sale uses) tells the exchange what the new items cost. Mode **net** (named customers): the return's credit pays for the new items (a `customer_credit` allocation, no new ledger line), the customer pays the difference or keeps the rest as store credit. Mode **refund** (the only mode for the walk-in customer): the returned value is paid back as a refund and the new items are paid in full; both payments are recorded as they happened.
+* **Supplier credit (`ApplySupplierCredit`):** lock order supplier → credit returns (oldest first) → bills (oldest first). What is left of a return's credit is read **after** the locks (its credit less its posted uses), so two people pressing the button at once cannot spend it twice. A use changes only the bill (`refreshPurchase`: due = total − returned − paid − credit used; the bill counts as settled for its status) and writes no ledger line: the supplier's balance already said the shop was owed the money. A return whose credit is in use, or a bill with credit used on it, cannot be cancelled until the use is taken back (`VoidSupplierCreditApplication`).
+* **Rounding:** `ProfitService` adds `Σ sales.round_off` of completed sales to **net profit only** (revenue is the net prices, so gross profit never contains it); prices and costs are never changed.
+
+### Integrity checks added
+28. A return's credit uses never add up to more than the credit it left; a use belongs to the supplier of both its return and its bill; no use stands on a cancelled return or bill.
+29. A bill's due and status count the credit used on it (replaces the due formula of check 25's neighbours).
+30. A customer's `sale_return` ledger line, the invoice's returned amount and the cancellation entry all use *value − restocking fee* (checks 21 and 23 adjusted).

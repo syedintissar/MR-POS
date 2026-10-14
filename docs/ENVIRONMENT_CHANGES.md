@@ -168,3 +168,14 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | Drills | The browser drills, the concurrency tests (real separate PHP processes) and the full test suite ran on the scratch schema `mrpos_test`, never on the real database. The mutation checks (the row locks of the return actions removed for one test run each, then restored byte for byte) ran there too |
 | `.env` | Not touched in this phase |
 | Not done | Windows service for MariaDB, scheduled task, Apache restart, firewall and vhost: still need an Administrator (see the Phase 2 section above) |
+
+---
+
+## 2026-10-13: Phase 8b additions (the owner's decisions)
+
+| Change | Detail |
+|---|---|
+| Real database `mrpos` | **Backed up first** (`mrpos_2026-10-13_152155_manual.zip`), then the one additive migration `phase8_owner_decisions` was applied (return fee / exception / exchange columns, purchase return credit columns, `supplier_credit_applications`, the new permission). **The Cashier role lost `expenses.view` and `expenses.create`** (owner decision); the Manager role received `sale_returns.override_period`. Nothing else changed; the integrity check and `pos:doctor` pass |
+| MariaDB was down | The PC had restarted (not yet a Windows service): started by hand with the documented command. **Still waiting for an Administrator: `deploy\windows\install-mariadb-service.ps1`** |
+| Temporary processes | The concurrency tests start child PHP processes against the scratch schema `mrpos_test`; the mutation checks (locks removed from `CreateSaleReturn`, `CreatePurchaseReturn` and `ApplySupplierCredit` for one test run each) were restored byte for byte |
+| `.env`, packages, ports | Not touched |

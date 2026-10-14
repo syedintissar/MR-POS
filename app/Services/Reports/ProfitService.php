@@ -41,7 +41,7 @@ class ProfitService
     public const FIGURES = [
         'sales_revenue', 'sales_returns', 'cogs', 'cogs_returned', 'returns_written_off',
         'service_jobs', 'service_revenue', 'service_labour', 'service_parts_revenue', 'service_parts_cost',
-        'expenses', 'stock_losses', 'service_written_off', 'supplier_difference',
+        'expenses', 'stock_losses', 'service_written_off', 'supplier_difference', 'rounding',
     ];
 
     public function __construct(private readonly SettingsService $settings) {}
@@ -97,7 +97,8 @@ class ProfitService
         $cost = Decimal::add($cogsNet, $f['service_parts_cost'], 2);
         $gross = Decimal::sub($revenue, $cost, 2);
         $other = Decimal::add(Decimal::add($f['expenses'], $f['stock_losses'], 2), $f['service_written_off'], 2);
-        $net = Decimal::add(Decimal::sub($gross, $other, 2), $f['supplier_difference'], 2);
+        // rounding differences on invoices (rounded up = the shop gained, rounded down = it gave away) belong to net profit, never to gross profit
+        $net = Decimal::add(Decimal::add(Decimal::sub($gross, $other, 2), $f['supplier_difference'], 2), $f['rounding'], 2);
 
         return $f + [
             'sales_net' => $salesNet,
@@ -152,6 +153,18 @@ class ProfitService
             $add((string) $r->b, 'sales_returns', $r->revenue);
             $add((string) $r->b, 'cogs_returned', $r->cost);
             $add((string) $r->b, 'returns_written_off', $r->lost);
+        }
+
+        // rounding differences on invoices (the "round the total to" setting): kept apart from prices and costs, which are never changed
+        foreach (DB::select("SELECT {$b('s.sale_date')} AS b, COALESCE(SUM(s.round_off), 0) AS diff
+                               FROM sales s WHERE s.status = 'completed' AND s.sale_date >= ? AND s.sale_date < ? GROUP BY b", [$start, $before]) as $r) {
+            $add((string) $r->b, 'rounding', $r->diff);
+        }
+
+        // restocking fees: revenue the shop kept out of returned goods, so it comes off what was given back
+        foreach (DB::select("SELECT {$b('r.return_date')} AS b, COALESCE(SUM(r.restocking_fee), 0) AS fee
+                               FROM sale_returns r WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY b", [$start, $before]) as $r) {
+            $add((string) $r->b, 'sales_returns', Decimal::neg((string) $r->fee, 2));
         }
 
         // service jobs: what was billed (without tax) split into charges and parts in proportion, and what the parts cost

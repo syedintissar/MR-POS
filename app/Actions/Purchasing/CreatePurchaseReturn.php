@@ -190,7 +190,7 @@ class CreatePurchaseReturn
             $return = new PurchaseReturn;
             $return->forceFill([
                 'return_no' => $returnNo, 'supplier_id' => $supplier->id, 'purchase_id' => $purchase?->id, 'return_date' => now(),
-                'subtotal' => $subtotal, 'tax_amount' => $tax, 'total' => $total, 'settlement' => $payment ? 'refund' : 'adjust_balance', 'supplier_payment_id' => $payment?->id,
+                'subtotal' => $subtotal, 'tax_amount' => $tax, 'total' => $total, 'applied_to_due' => $applied, 'credit_amount' => Decimal::sub($remainder, $refund, 2), 'refund_amount' => $refund, 'settlement' => $payment ? 'refund' : 'adjust_balance', 'supplier_payment_id' => $payment?->id,
                 'reason' => mb_substr($reason, 0, 255), 'status' => PurchaseReturn::POSTED, 'created_by' => $by->id,
             ]);
             $return->save();

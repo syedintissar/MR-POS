@@ -31,7 +31,7 @@ class DashboardService
 
         $s = DB::selectOne("SELECT COUNT(*) AS invoices, COALESCE(SUM(grand_total), 0) AS total, COALESCE(SUM(tax_total), 0) AS tax, COALESCE(SUM(line_discount_total + invoice_discount_amount), 0) AS discounts
                               FROM sales WHERE status = 'completed' AND sale_date >= ? AND sale_date < ?", [$start, $end]);
-        $r = DB::selectOne("SELECT COALESCE(SUM(total), 0) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ?", [$start, $end]);
+        $r = DB::selectOne("SELECT COALESCE(SUM(total - restocking_fee), 0) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ?", [$start, $end]);
         $j = DB::selectOne("SELECT COUNT(*) AS jobs, COALESCE(SUM(grand_total), 0) AS total FROM service_jobs WHERE status = 'delivered' AND invoiced_at >= ? AND invoiced_at < ?", [$start, $end]);
 
         $total = Decimal::round((string) $s->total, 2);
@@ -123,7 +123,7 @@ class DashboardService
             $byKey[(string) $row->b] = Decimal::round((string) $row->total, 2);
         }
         $rb = Periods::sql('return_date', $group);
-        foreach (DB::select("SELECT {$rb} AS b, SUM(total) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ? GROUP BY b", [$start, $end]) as $row) {
+        foreach (DB::select("SELECT {$rb} AS b, SUM(total - restocking_fee) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ? GROUP BY b", [$start, $end]) as $row) {
             $byKey[(string) $row->b] = Decimal::sub($byKey[(string) $row->b] ?? '0.00', (string) $row->total, 2);
         }
 
@@ -155,7 +155,7 @@ class DashboardService
         foreach (DB::select("SELECT DATE_FORMAT(sale_date, '%Y-%m') AS m, SUM(grand_total) AS total FROM sales WHERE status = 'completed' AND sale_date >= ? AND sale_date < ? GROUP BY m", [$from, $to]) as $row) {
             $byMonth[$row->m] = Decimal::round((string) $row->total, 2);
         }
-        foreach (DB::select("SELECT DATE_FORMAT(return_date, '%Y-%m') AS m, SUM(total) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ? GROUP BY m", [$from, $to]) as $row) {
+        foreach (DB::select("SELECT DATE_FORMAT(return_date, '%Y-%m') AS m, SUM(total - restocking_fee) AS total FROM sale_returns WHERE status = 'posted' AND return_date >= ? AND return_date < ? GROUP BY m", [$from, $to]) as $row) {
             $byMonth[$row->m] = Decimal::sub($byMonth[$row->m] ?? '0.00', (string) $row->total, 2);
         }
 
