@@ -356,3 +356,18 @@ php artisan pos:audit:verify                     # check the audit log for tampe
 | Restore drill: a marker user deleted and a file changed after the backup, then restored with maintenance mode on | The marker user and the file came back in 3.6 s; the audit chain stayed intact; the web app came back up |
 | Restore command with a wrong password, or as a non-admin | Refused, nothing changed |
 | A failure found by the drill: under PHP's built-in server the dump failed with Windows error 10106 because the child process had no `SystemRoot` | Fixed (it is always passed explicitly now) and covered by a regression test that reproduces the error without the fix |
+
+## 16. Phase 9 status (2026-10-14)
+
+Most of this design had been built in Phase 2 (see §15). Phase 9 added what was missing and was safe to build without choosing an internet service for you:
+
+| Item | Status |
+|---|---|
+| **Recovery Kit** (printable page: application key, database name and server, backup folder, newest backup and its verification, second-copy locations, the step-by-step recovery on a new PC; the encryption password is never printed, a line is left to write it by hand). Backups → *Recovery Kit (print)*; needs `backups.settings` (administrator) **and** the password; every opening is audited | Built, tested |
+| **Bring a backup file from a USB drive or another PC** (Backups page): the file is quick-verified (checksum, manifest, structure; with its password if encrypted), kept in the `uploaded` tier with a checksum file, registered in the list, and can then be restored from the command line. A bad file is removed and the refusal audited. Needs `backups.create` and the password | Built, tested |
+| Audit hash chain, `pos:audit:verify`, audit viewer, JSONL mirror | Already built in Phase 2 |
+| Restore from the web page | **Deliberately not built**: a restore replaces every record and signs everybody out, so it stays a command-line step by an administrator (typed confirmation, safety backup first, automatic rollback). The Recovery Kit gives the exact command |
+| Cloud destinations (SFTP, S3-compatible, rclone) | **Not built, owner's choice needed**: the system is local-first and works without internet. The destination tables and retry engine are ready; tell me which service (if any) you use and I will add that one driver (it will refuse to run unencrypted) |
+| Intraday backups | Not built: the daily backup plus *Backup Now* (and the safety backup before any restore) cover a one-shop day; say if you want a second automatic backup at midday |
+
+Tests: `RecoveryAndUploadTest` (4), plus the existing backup, restore, retention and verification tests, all passing. Disaster-recovery drill: the restore of a real backup onto an empty database is proven by the automated restore tests; the drill on a second physical PC remains for you to do (follow the Recovery Kit).

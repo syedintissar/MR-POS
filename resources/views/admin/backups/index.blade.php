@@ -35,6 +35,16 @@
                     <button type="submit" class="btn btn-secondary">Retry pending copies</button>
                 </form>
             @endcan
+            @can('backups.settings')<a href="{{ route('backups.recovery-kit') }}" target="_blank" class="btn btn-secondary" data-no-loading>Recovery Kit (print)</a>@endcan
+            @can('backups.create')
+                <details class="w-full"><summary class="cursor-pointer text-sm text-slate-600">Bring a backup file from a USB drive or another PC</summary>
+                    <form method="POST" action="{{ route('backups.upload') }}" enctype="multipart/form-data" class="mt-2 flex flex-wrap items-end gap-3">@csrf
+                        <div><label class="label" for="file">Backup file (.zip)</label><input id="file" type="file" name="file" accept=".zip" required class="input"></div>
+                        <div><label class="label" for="backup_password">Its password (only if it was encrypted)</label><input id="backup_password" type="password" name="backup_password" class="input" autocomplete="off"></div>
+                        <button class="btn btn-secondary" data-loading-text="Checking…">Check and keep</button>
+                    </form>
+                </details>
+            @endcan
             <div class="text-xs text-slate-500">Stored in <code class="rounded bg-slate-100 px-1">{{ $root }}</code>. Selling is not interrupted while a backup runs.</div>
         </div>
 

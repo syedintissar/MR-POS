@@ -61,6 +61,48 @@ class BackupController extends Controller
         return redirect()->route('backups.index')->with('success', "Backup completed: {$b->filename}");
     }
 
+    /** A backup file brought from elsewhere (a USB drive, the old PC): checked first, then kept with the others so a restore can use it. */
+    public function upload(Request $request): RedirectResponse
+    {
+        $this->authorize('backups.create');
+        $d = $request->validate(['file' => ['required', 'file', 'max:2097152'], 'backup_password' => ['nullable', 'string', 'max:200']]);
+
+        $name = 'mrpos_uploaded_'.now()->format('Y-m-d_His').'.zip';
+        $dir = $this->backups->tierPath(Backup::TIER_UPLOADED);
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            return back()->with('error', 'The folder for uploaded backups could not be created.');
+        }
+        $target = $dir.DIRECTORY_SEPARATOR.$name;
+        $d['file']->move($dir, $name);
+
+        $result = $this->verifier->quickFile($target, null, ($d['backup_password'] ?? '') !== '' ? $d['backup_password'] : null);
+        if (! $result->passed) {
+            @unlink($target);
+            $this->audit->log('backup_upload_refused', 'backups', 'An uploaded backup file failed verification and was removed: '.implode(' ', array_slice($result->notes, -1)), user: $request->user());
+
+            return back()->with('error', 'That file is not a good backup and was not kept: '.implode(' ', array_slice($result->notes, -1)));
+        }
+        file_put_contents($target.'.sha256', hash_file('sha256', $target).'  '.$name."\n");
+        $this->backups->resyncCatalogue();
+        $this->audit->log('backup_uploaded', 'backups', "Backup file {$name} was uploaded and passed verification", user: $request->user());
+
+        return redirect()->route('backups.index')->with('success', "The backup was checked and kept as {$name}. It can now be restored from the command line (see the Recovery Kit).");
+    }
+
+    /** One printable page with what is needed to rebuild the system on a new PC. It shows the application key, so the password is asked first. */
+    public function recoveryKit(Request $request): View
+    {
+        $this->authorize('backups.settings');
+        $this->audit->log('recovery_kit_opened', 'backups', 'The Recovery Kit was opened by '.$request->user()->name, user: $request->user());
+        $good = Backup::available()->where('verify_status', 'passed')->orderByDesc('started_at')->first() ?? Backup::available()->orderByDesc('started_at')->first();
+
+        return view('admin.backups.recovery-kit', [
+            'shop' => $this->settings->string('shop.name') ?: config('app.name'), 'key' => (string) config('app.key'), 'root' => $this->backups->root(),
+            'db' => ['name' => config('database.connections.'.config('database.default').'.database'), 'host' => config('database.connections.'.config('database.default').'.host'), 'port' => config('database.connections.'.config('database.default').'.port')],
+            'destinations' => BackupDestination::query()->orderBy('id')->get(), 'last' => $good, 'encrypted' => $this->settings->bool('backup.encryption_enabled'), 'printedBy' => $request->user()->name,
+        ]);
+    }
+
     public function verify(Request $request, Backup $backup): RedirectResponse
     {
         $this->authorize('backups.verify');

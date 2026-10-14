@@ -179,3 +179,13 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | MariaDB was down | The PC had restarted (not yet a Windows service): started by hand with the documented command. **Still waiting for an Administrator: `deploy\windows\install-mariadb-service.ps1`** |
 | Temporary processes | The concurrency tests start child PHP processes against the scratch schema `mrpos_test`; the mutation checks (locks removed from `CreateSaleReturn`, `CreatePurchaseReturn` and `ApplySupplierCredit` for one test run each) were restored byte for byte |
 | `.env`, packages, ports | Not touched |
+
+---
+
+## 2026-10-14: Phase 9 additions
+
+| Change | Detail |
+|---|---|
+| Database / packages / `.env` | No change (no migration in this phase) |
+| Uploaded backups | A new folder `storage\app\backups\uploaded` is created on first use |
+| MariaDB | Was down after a PC restart and started by hand again; **still waiting for the Windows service** (owner action) |

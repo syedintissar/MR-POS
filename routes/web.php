@@ -363,6 +363,8 @@ Route::middleware('auth')->group(function () {
             Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
         });
         Route::post('backups', [BackupController::class, 'store'])->middleware('can:backups.create')->name('backups.store');
+        Route::post('backups/upload', [BackupController::class, 'upload'])->middleware(['can:backups.create', 'password.confirm'])->name('backups.upload');
+        Route::get('backups/recovery-kit', [BackupController::class, 'recoveryKit'])->middleware(['can:backups.settings', 'password.confirm'])->name('backups.recovery-kit');
         Route::post('backups/retry-transfers', [BackupController::class, 'retryTransfers'])->middleware('can:backups.create')->name('backups.retry-transfers');
         Route::put('backups/settings', [BackupController::class, 'updateSettings'])->middleware(['can:backups.settings', 'password.confirm'])->name('backups.settings');
         Route::post('backups/destinations', [BackupController::class, 'storeDestination'])->middleware(['can:backups.settings', 'password.confirm'])->name('backups.destinations.store');
