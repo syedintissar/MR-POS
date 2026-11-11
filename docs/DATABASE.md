@@ -1119,3 +1119,38 @@ Migration `2026_10_11_800000_phase8_owner_decisions` (additive; applied to the r
 28. A return's credit uses never add up to more than the credit it left; a use belongs to the supplier of both its return and its bill; no use stands on a cancelled return or bill.
 29. A bill's due and status count the credit used on it (replaces the due formula of check 25's neighbours).
 30. A customer's `sale_return` ledger line, the invoice's returned amount and the cancellation entry all use *value − restocking fee* (checks 21 and 23 adjusted).
+## 16. Phase 11 implementation notes (cash & bank book, day closing)
+
+| Table | Purpose | Notes |
+|---|---|---|
+| `money_accounts` | Where the money is: `kind` cash / bank / wallet | **No balance column.** `is_system` marks the main cash drawer (cannot be switched off). The kind never changes |
+| `payment_methods.money_account_id` | The account a method pays into | Nullable. Never set for `customer_credit` (store credit is not money). A method without an account is in no balance and is pointed out on the Cash & bank page |
+| `money_transactions` | Money that moved without a sale, purchase or expense | `type`: `transfer` (from and to), `owner_out` / `count_short` (from only), `owner_in` / `opening_balance` / `count_over` (to only); a `CHECK` enforces the shape. Posted / voided like every other document. Numbered `CBK-` |
+| `day_closings` | The drawer counted against the book | `expected_amount` (the book at that moment), `counted_amount`, `difference` = counted - expected (`CHECK`), `denominations` (JSON: note => how many, `coins` => amount; null when the total was typed), `adjustment_transaction_id` set exactly when the difference is not zero (`CHECK`). Numbered `DCL-` |
+
+### The balance is a read model, not a ledger
+`MoneyAccountService` adds an account up from five sources in one `UNION ALL`: posted `customer_payments` (receipt in, refund out), posted `supplier_payments` (payment out, refund in), posted `expenses` (out), each through `payment_methods.money_account_id`; and posted `money_transactions` (in for `to_account_id`, out for `from_account_id`). These are the same rows the report "Money in and out by payment method" reads, so the two cannot disagree, and there is nothing cached to drift. The price is that changing a method's account moves its whole history (asked for with the password, audited), and that a document cancelled after a closing changes the book afterwards: the next count shows it as a difference, which is where a person should look at it.
+
+### Posting rules as implemented
+| Operation | Writes |
+|---|---|
+| `PostMoneyTransaction` | locks the accounts involved in id order; refuses a switched-off account, a second opening balance, and cash leaving a cash account that does not hold it (bank and wallet accounts may be overdrawn); number, row, audit |
+| `VoidMoneyTransaction` | marks the row voided with who and why; refuses `count_over` / `count_short` (they belong to a closing) |
+| `CloseDay` | locks the account row (the lock every closing and cancellation of that account takes); expected = the balance now; a difference needs an explanation and writes a `count_over` / `count_short` entry in the same transaction; number, row, audit |
+| `VoidDayClosing` | only the latest posted closing of the account; voids its entry with it |
+
+### Integrity checks added (`pos:integrity:check`)
+No customer-credit method has an account; at most one posted opening balance per account; every closing with a difference has an entry of the right type, amount and account, and the two have the same status; every count entry belongs to exactly one closing.
+
+### Phase 11, the owner's decisions (migration `2026_11_11_900100_cash_book_owner_decisions`)
+
+| Change | Notes |
+|---|---|
+| `users.money_account_id` | A person's own cash drawer (a cash account that is not the main drawer); null = the main drawer |
+| `customer_payments.money_account_id`, `supplier_payments.money_account_id`, `expenses.money_account_id` | **The account the row landed in.** Written by a `BEFORE INSERT` trigger on each table (`<table>_money_account`): the account of the payment method, except that cash which would go to the main (system) drawer goes to the drawer of `created_by` when that person has one. `expenses_money_account_update` restamps an expense whose payment method is corrected. The triggers are single statements, so they survive any way a backup is restored. `MoneyAccountService` now reads this column instead of joining the payment method, so re-pointing a method or giving a person another drawer changes the future only |
+| `bank_reconciliations` | One statement of a bank or wallet account: `statement_date`, `opening_balance` (the closing balance of the statement completed before it, 0 for the first), `statement_balance`, status open / completed / voided (`CHECK`). Numbered `REC-` |
+| `bank_reconciliation_items` | One row per line of the book found on a statement, with the amounts as they were. `UNIQUE (money_account_id, source, source_id)`: a line is matched once. Deleted when its statement is cancelled (the statement row and the audit entry stay) |
+
+Rules (`BankReconciliationService`): only bank and wallet accounts; one open statement per account; a later statement date than the last completed one; completion only when opening + ticked in - ticked out = statement balance; only the latest statement of an account can be cancelled; `PostMoneyTransaction` refuses an entry dated on or before the last completed statement of an account it touches. Integrity check added: every item of a completed statement is still in the book of that account with the same amounts.
+
+Profit: `ProfitService` has one more figure, `cash_difference` (posted `count_over` minus `count_short`, by entry date), added to net profit only.

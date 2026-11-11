@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\MoneyAccount;
 use App\Models\PaymentMethod;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
@@ -31,6 +32,10 @@ class PaymentMethodController extends Controller
             'is_system' => false,
             'sort_order' => ((int) PaymentMethod::query()->max('sort_order')) + 10,
         ]);
+        // a new cash method pays into the cash drawer at once; any other kind is linked to its account under Cash & bank → Accounts
+        if ($method->kind === 'cash' && ($drawer = MoneyAccount::query()->where('is_system', true)->where('kind', 'cash')->value('id'))) {
+            $method->forceFill(['money_account_id' => $drawer])->save();
+        }
         $this->audit->log('payment_method_created', 'settings', "Payment method “{$method->name}” added", $method, new: $d);
 
         return redirect()->route('settings.index', 'payment_methods')->with('success', "“{$method->name}” added.");

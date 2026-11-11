@@ -26,6 +26,7 @@ use InvalidArgumentException;
  *   − stock lost or found  = stock adjustments at cost, except the opening stock
  *   − service parts written off (parts taken off a job and thrown away, by the day they were removed)
  *   ± difference on goods sent back to suppliers = credit received − cost of the stock that left
+ *   ± rounding differences on invoices, and cash found short or over when the drawer was counted
  *   ------------------------------------------------------------------------------------------------------------------------------
  *   NET PROFIT
  *
@@ -41,7 +42,7 @@ class ProfitService
     public const FIGURES = [
         'sales_revenue', 'sales_returns', 'cogs', 'cogs_returned', 'returns_written_off',
         'service_jobs', 'service_revenue', 'service_labour', 'service_parts_revenue', 'service_parts_cost',
-        'expenses', 'stock_losses', 'service_written_off', 'supplier_difference', 'rounding',
+        'expenses', 'stock_losses', 'service_written_off', 'supplier_difference', 'rounding', 'cash_difference',
     ];
 
     public function __construct(private readonly SettingsService $settings) {}
@@ -98,7 +99,8 @@ class ProfitService
         $gross = Decimal::sub($revenue, $cost, 2);
         $other = Decimal::add(Decimal::add($f['expenses'], $f['stock_losses'], 2), $f['service_written_off'], 2);
         // rounding differences on invoices (rounded up = the shop gained, rounded down = it gave away) belong to net profit, never to gross profit
-        $net = Decimal::add(Decimal::add(Decimal::sub($gross, $other, 2), $f['supplier_difference'], 2), $f['rounding'], 2);
+        // so does cash found short (a loss) or over (a gain) when the drawer was counted
+        $net = Decimal::add(Decimal::add(Decimal::add(Decimal::sub($gross, $other, 2), $f['supplier_difference'], 2), $f['rounding'], 2), $f['cash_difference'], 2);
 
         return $f + [
             'sales_net' => $salesNet,
@@ -205,6 +207,12 @@ class ProfitService
                                FROM purchase_return_items ri JOIN purchase_returns r ON r.id = ri.purchase_return_id
                               WHERE r.status = 'posted' AND r.return_date >= ? AND r.return_date < ? GROUP BY b", [$start, $before]) as $r) {
             $add((string) $r->b, 'supplier_difference', $r->diff);
+        }
+
+        // cash short (-) or over (+) found when a drawer was counted (day closings that were not cancelled)
+        foreach (DB::select("SELECT {$b('t.txn_date')} AS b, COALESCE(SUM(CASE WHEN t.type = 'count_over' THEN t.amount ELSE -t.amount END), 0) AS diff
+                               FROM money_transactions t WHERE t.type IN ('count_over', 'count_short') AND t.status = 'posted' AND t.txn_date BETWEEN ? AND ? GROUP BY b", [$from, $to]) as $r) {
+            $add((string) $r->b, 'cash_difference', $r->diff);
         }
 
         return $out;

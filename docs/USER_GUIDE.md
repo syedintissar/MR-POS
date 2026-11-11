@@ -205,7 +205,24 @@ Managers and administrators see **Business at a glance** at the top of the dashb
 * **Print** opens a clean A4 page. **PDF, Excel and CSV** (for people allowed to export) download a file with exactly the same figures; Excel and CSV open as real numbers you can add up.
 * **Cost and profit columns** appear only for people allowed to see them; the same report, printed or exported by someone without that permission, simply does not contain them.
 * **Profit** shows the whole calculation line by line: product sales, returns, **service revenue (charges and parts)**, the cost of goods and of the parts used, gross profit, then expenses, stock lost, parts written off and the difference on goods sent back to suppliers, and net profit; below it the same by day, week, month or year.
-* **Closing summary:** at closing time choose *Today*, count the cash in the drawer and compare it with the **Net movement** of the *Cash* row (money received, less refunds, supplier payments and expenses paid in cash).
+* **Closing summary:** the day in numbers (invoices, returns, jobs, purchases, money by payment method, profit). To count the drawer and keep the count on record, use **Money → Cash & bank → Close the day** (next section).
+
+## 9a. Cash & bank (Phase 11)
+**Money → Cash & bank** shows where the shop's money is: the **Cash drawer**, the **Bank account** and each wallet, with what each holds now. Managers and administrators see it; cashiers and technicians do not.
+
+* **Where the figures come from.** Every sale, customer payment, refund, supplier payment and expense lands in the account of its payment method (Cash → Cash drawer, Bank Transfer / Card / Cheque → Bank account, Easypaisa and JazzCash → their own). Nothing is typed twice. A cancelled document disappears from the balance too.
+* **The book of an account.** Click an account, choose the dates: you see what was brought forward, every movement with its document number (click it to open the document), money in, money out and the balance after each line. **Print** gives an A4 page.
+* **Move money.** Use this for money that moved without a sale, a purchase or an expense:
+  * *Transfer*: the day's cash taken to the bank, or money drawn from the bank for the drawer. Write the deposit slip number in *Reference*.
+  * *Owner took money out* / *Owner put money in*: your own money. It is not an expense or a sale, so profit does not change.
+  * Cash cannot leave the drawer if the book says it is not there. If there really is more cash, close the day first so the book is brought to the count.
+* **Close the day** (every evening). The screen shows what the drawer held this morning, what came in and went out today, and what **should** be there. Type how many notes of each kind you have (5000, 1000, 500, 100, 50, 20, 10) and the coins as an amount, or just type the total. You see at once whether the count is **exact, short or over**. If it differs you must write what explains it. The difference is recorded with your name, the book is set to what you counted, and tomorrow starts from there. Print the closing and sign it.
+* **A mistake.** An entry or a closing is never deleted: open it and **cancel** it with a reason (it asks for your password). Only the latest closing of a drawer can be cancelled; a short / over entry is cancelled by cancelling its closing.
+* **The reminder.** If a drawer took or paid cash on an earlier day and has not been counted since, a yellow line on the dashboard and on the till says so. Managers get a *Close the day* link; cashiers are asked to tell the manager. Selling is never stopped.
+* **Cash short or over and profit.** What the counts found missing or extra is a line in the profit report ("Cash short or over at day closing"). It counts in net profit only.
+* **One drawer per counter (administrator).** *Accounts*: add a cash account for each counter ("Counter 2 drawer"), then under *One drawer per counter* choose it for the person who works there. From then on the cash that person takes, refunds or pays out lands in their drawer; everybody else's goes to the main drawer. Each drawer is counted and closed on its own. To empty a counter drawer into the main drawer or the bank, use *Move money → Transfer*. A change applies from now on; what was already taken stays where it landed.
+* **Bank statements.** When the bank or wallet statement arrives: *Bank statements → Match a new statement*, choose the account, the last day the statement covers and the closing balance printed on it. Tick every line that is on the statement; the box "Still to find" shows what is missing. A bank charge or interest that is on the statement but not in the list is recorded first (an expense paid by a method of that account, or an entry), then ticked. When nothing is left to find, press **Close the statement**. Lines not on it yet (a cheque not cleared) stay open for the next statement, which starts from this one's closing balance. After closing, entries for that account cannot be dated inside the statement.
+* **Setting up (administrator), once.** *Accounts*: rename the accounts, add your real bank accounts, and check **where each payment method pays into**. A change applies from now on (money a method took while it had no account at all goes to the account you choose). Then enter the **opening balance** of each account: count the drawer and read the bank and wallet balances on the day you start. If a payment method has no account, the Cash & bank page says so in a yellow bar: its money is in no balance until you choose one.
 ## 10. Administration
 
 ### Users
@@ -262,6 +279,7 @@ Shows whether the computer has everything it needs: PHP features, the database v
 
 ## 11. Daily / weekly checklists
 - **Every morning:** look at the dashboard. If there is a red or amber backup message, open *Backups* and read it.
+- **Every evening:** Cash & bank → *Close the day*: count the drawer, explain any difference, print and sign. Record the bank deposit as a transfer when it is made.
 - **Every week:** swap the USB backup drive (take the newer one home). Confirm the second copy shows as *success*.
 - **After any change to the computer or network:** run *Backup Now* and then *Test restore*.
 

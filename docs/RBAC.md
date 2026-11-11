@@ -82,6 +82,12 @@
 | | `expenses.edit` | Same-day edit |
 | | `expenses.void` | |
 | | `expense_categories.manage` | |
+| Cash & bank | `cashbook.view` | Accounts, balances and the book of each account |
+| | `cashbook.transact` | Transfers (bank deposits), owner money in or out |
+| | `cashbook.close_day` | Count the drawer and close the day |
+| | `cashbook.reconcile` | Match a bank or wallet account against its statement |
+| | `cashbook.void` | Cancel an entry, a day closing or a statement matching |
+| | `cashbook.manage` | Accounts, opening balances, drawers of people, where each payment method pays into |
 | Reports | `reports.sales` | Sales, returns, payment-method reports |
 | | `reports.inventory` | Stock, valuation*, movements |
 | | `reports.purchases` | Purchases and returns |
@@ -171,6 +177,8 @@
 | expenses.view / create | ✅ | ✅ | — (owner decision, Phase 8b: cashiers do not see or record expenses; an administrator can grant it to a role) | — |
 | expenses.edit / void | ✅ | ✅ | — | — |
 | expense_categories.manage | ✅ | ✅ | — | — |
+| cashbook.view / transact / close_day / reconcile / void | ✅ | ✅ | — | — |
+| cashbook.manage | ✅ | — | — | — |
 | reports.sales / inventory / purchases / customers / suppliers / service / expenses | ✅ | ✅ | — | — |
 | reports.profit | ✅ | ✅ | — | — |
 | reports.export | ✅ | ✅ | — | — |
@@ -358,3 +366,26 @@ A role built by the administrator can hold any of these on its own: the cost and
 | Change the return period or the restocking fee | `settings.manage` (Administrator) | no | no |
 
 `Phase8RoleMatrixTest` was updated (expense routes are now managers only, 92 permissions in the catalogue); `ExpenseTest` proves a cashier and a technician get 403 on every expense route and see nothing on the dashboard.
+## 13. Phase 11 route map: cash & bank (as enforced)
+
+| Route | Permission | Manager | Cashier / Technician |
+|---|---|---|---|
+| `GET /cash-book`, `/cash-book/accounts/{id}` (and `/print`), `/cash-book/entries`, `/cash-book/entries/{id}`, `/cash-book/closings`, `/cash-book/closings/{id}` | `cashbook.view` | yes | no |
+| `GET /cash-book/entries/create`, `POST /cash-book/entries` | `cashbook.transact` for a transfer or owner money; `cashbook.manage` for an opening balance (checked in the controller **and** in the action) | yes, except opening balances | no |
+| `POST /cash-book/entries/{id}/void` | `cashbook.void` + password | yes | no |
+| `GET /cash-book/closings/create`, `POST /cash-book/closings` | `cashbook.close_day` | yes | no |
+| `POST /cash-book/closings/{id}/void` | `cashbook.void` + password; only the latest closing of the account | yes | no |
+| `GET /cash-book/setup`, `POST /cash-book/accounts`, `PUT /cash-book/accounts/{id}`, `POST /cash-book/accounts/{id}/toggle` | `cashbook.manage` | no | no |
+| `PUT /cash-book/methods/{id}` (which account a payment method pays into) | `cashbook.manage` + password | no | no |
+
+The book of an account links each line to its document only for people who may open that document (`customer_payments.view`, `supplier_payments.view`, `expenses.view`). `Phase11RoleMatrixTest` runs every route against every default role and proves each permission works on its own; the catalogue now holds 98 permissions.
+
+### Added with the owner's decisions (2026-11-11)
+
+| Route | Permission | Manager | Cashier / Technician |
+|---|---|---|---|
+| `GET /cash-book/statements`, `/cash-book/statements/{id}` | `cashbook.view` | yes | no |
+| `POST /cash-book/statements`, `PUT /cash-book/statements/{id}` (save ticks, close) | **`cashbook.reconcile`** (new; Manager and Administrator), checked in the routes and in the service | yes | no |
+| `POST /cash-book/statements/{id}/void` | `cashbook.void` + password; only the latest statement of the account | yes | no |
+| `PUT /cash-book/people/{user}/drawer` (a person's own cash drawer) | `cashbook.manage` | no | no |
+| The "drawer not counted" reminder on the dashboard and the till | shown to `cashbook.close_day` (with the link) and to `pos.access` (without it) | yes | cashier: yes, technician: no |

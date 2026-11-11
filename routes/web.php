@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\Auth\PasswordConfirmController;
+use App\Http\Controllers\CashBookController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
@@ -279,6 +280,50 @@ Route::middleware('auth')->group(function () {
         Route::get('{report}', [ReportController::class, 'show'])->where('report', '[a-z\-]+')->name('show');
         Route::get('{report}/print', [ReportController::class, 'print'])->where('report', '[a-z\-]+')->name('print');
         Route::get('{report}/export/{format}', [ReportController::class, 'export'])->where('report', '[a-z\-]+')->whereIn('format', ['csv', 'xlsx', 'pdf'])->name('export');
+    });
+
+    // ---- Phase 11: cash & bank book, day closing -------------------------------------------------------------------
+
+    Route::prefix('cash-book')->name('cashbook.')->group(function () {
+        Route::middleware('can:cashbook.view')->group(function () {
+            Route::get('/', [CashBookController::class, 'index'])->name('index');
+            Route::get('accounts/{account}', [CashBookController::class, 'account'])->whereNumber('account')->name('accounts.show');
+            Route::get('accounts/{account}/print', [CashBookController::class, 'printAccount'])->whereNumber('account')->name('accounts.print');
+            Route::get('entries', [CashBookController::class, 'entries'])->name('entries.index');
+            Route::get('entries/{entry}', [CashBookController::class, 'showEntry'])->whereNumber('entry')->name('entries.show');
+            Route::get('closings', [CashBookController::class, 'closings'])->name('closings.index');
+            Route::get('closings/{closing}', [CashBookController::class, 'showClosing'])->whereNumber('closing')->name('closings.show');
+        });
+        // the controller and the action check: transfers and owner money need cashbook.transact, an opening balance needs cashbook.manage
+        Route::get('entries/create', [CashBookController::class, 'createEntry'])->name('entries.create');
+        Route::post('entries', [CashBookController::class, 'storeEntry'])->name('entries.store');
+        Route::post('entries/{entry}/void', [CashBookController::class, 'voidEntry'])->whereNumber('entry')->middleware(['can:cashbook.void', 'password.confirm'])->name('entries.void');
+
+        Route::middleware('can:cashbook.close_day')->group(function () {
+            Route::get('closings/create', [CashBookController::class, 'createClosing'])->name('closings.create');
+            Route::post('closings', [CashBookController::class, 'storeClosing'])->name('closings.store');
+        });
+        Route::post('closings/{closing}/void', [CashBookController::class, 'voidClosing'])->whereNumber('closing')->middleware(['can:cashbook.void', 'password.confirm'])->name('closings.void');
+
+        Route::middleware('can:cashbook.manage')->group(function () {
+            Route::get('setup', [CashBookController::class, 'setup'])->name('setup');
+            Route::post('accounts', [CashBookController::class, 'storeAccount'])->name('accounts.store');
+            Route::put('accounts/{account}', [CashBookController::class, 'updateAccount'])->whereNumber('account')->name('accounts.update');
+            Route::post('accounts/{account}/toggle', [CashBookController::class, 'toggleAccount'])->whereNumber('account')->name('accounts.toggle');
+            Route::put('methods/{method}', [CashBookController::class, 'linkMethod'])->whereNumber('method')->middleware('password.confirm')->name('methods.link');
+            Route::put('people/{user}/drawer', [CashBookController::class, 'assignDrawer'])->whereNumber('user')->name('people.drawer');
+        });
+
+        // bank statement matching
+        Route::middleware('can:cashbook.view')->group(function () {
+            Route::get('statements', [CashBookController::class, 'reconciliations'])->name('reconciliations.index');
+            Route::get('statements/{reconciliation}', [CashBookController::class, 'showReconciliation'])->whereNumber('reconciliation')->name('reconciliations.show');
+        });
+        Route::middleware('can:cashbook.reconcile')->group(function () {
+            Route::post('statements', [CashBookController::class, 'storeReconciliation'])->name('reconciliations.store');
+            Route::put('statements/{reconciliation}', [CashBookController::class, 'saveReconciliation'])->whereNumber('reconciliation')->name('reconciliations.save');
+        });
+        Route::post('statements/{reconciliation}/void', [CashBookController::class, 'voidReconciliation'])->whereNumber('reconciliation')->middleware(['can:cashbook.void', 'password.confirm'])->name('reconciliations.void');
     });
 
     // Supplier credit (left over from goods sent back): use it on bills, or take a use back

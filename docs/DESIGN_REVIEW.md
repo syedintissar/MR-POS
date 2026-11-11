@@ -337,3 +337,47 @@ Other owner instructions for Phase 2: `git init` first, initial commit before ma
 | P8b-02 | A bill paid only by supplier credit would still say "unpaid" | The payment status counts credit used (a test caught it) |
 | P8b-03 | An exchange of a named customer could take the credit from an older advance instead of the return's own | Credit is interchangeable, the total used is exact; the return of an exchange is cancelled only after its replacement invoice, so the two can never half-undo |
 | P8b-04 | The MariaDB server was down again after a PC restart and every test failed with "connection refused" | Restarted by hand; still waiting for the Windows service (owner action) |
+## 13. Phase 11 decisions and findings (cash & bank book, day closing)
+
+The feature was proposed after reading the Moon Traders ERP (general ledger, bank register with statement reconciliation, cash denominations on each settlement). The full ledger and the reconciliation were left out on purpose (SRS 1.3); the account idea and the note-by-note count were kept.
+
+### Defaults used (the owner can change any of them)
+| # | Topic | Default |
+|---|---|---|
+| P11-D1 | Balance kept or added up | **Added up** from the existing documents through the payment method. No change to the sale, payment or expense code; nothing to drift |
+| P11-D2 | Starting accounts | Cash drawer (system), Bank account (bank, card and cheque methods), one account per wallet method. "Other" methods are left for the administrator to link |
+| P11-D3 | Who closes the day | Managers and administrators; they see the expected amount while counting |
+| P11-D4 | A difference at the count | Must be explained; recorded as a `count_short` / `count_over` entry so the book equals the drawer. Not an expense, not in profit |
+| P11-D5 | Owner money | Its own entry types; never an expense or a sale, so profit is not touched |
+| P11-D6 | Cash below zero | Refused for transfers and owner money out of a cash account; sales refunds and expenses are not blocked (they already happened at the counter) |
+| P11-D7 | Opening balances and accounts | Administrator only (`cashbook.manage`), once per account, corrected by cancelling |
+| P11-D8 | Cancelling a closing | Only the latest one of the account |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P11-01 | With `php artisan optimize` in place (Phase 10), **PHPUnit booted from the cached production config**: `APP_ENV` and the database name in `phpunit.xml` were ignored, and `migrate:fresh` was aimed at the real schema. Only Laravel's production confirmation stopped it | `phpunit.xml` now sets `APP_CONFIG_CACHE`, `APP_ROUTES_CACHE` and `APP_EVENTS_CACHE` to files that never exist, so the tests always read the real sources and `mrpos_test` |
+| P11-02 | The command-line `php` on this PC (Herd, 8.5.0) has no GD or intl; the two image tests need them | Tests are run with `C:\xampp\php\php.exe` (8.5.10), the same PHP Apache uses |
+| P11-03 | Two tests counted 92 permissions | Now 97 |
+| P11-04 | The migration was **not** applied to the real database and the caches were not rebuilt: the shop PC keeps running Phase 10 until the owner approves | See PHASE11_REPORT section 5 |
+
+### Questions for the owner
+See PHASE11_REPORT section 7 (P11-Q1 to P11-Q5): cashiers counting and a blind count, refusing sales until yesterday is closed, bank statement matching, cash short in the profit report, one drawer per counter.
+
+## 14. Phase 11: the owner's answers (2026-11-11)
+
+| # | Question | The owner's decision | How it was built |
+|---|---|---|---|
+| P11-Q1 | Who counts the drawer? | **Managers only** | Unchanged (P11-D3) |
+| P11-Q2 | Yesterday not closed? | **Remind only** | `MoneyAccountService::unclosedDrawers()` (cached one minute, forgotten on a closing or its cancellation); a line on the dashboard and the till; selling is never blocked |
+| P11-Q4 | Cash short in profit? | **Yes, net profit only** | `cash_difference` in `ProfitService`; a line in the profit report |
+| P11-Q3 | Bank statement matching? | **Yes** | `BankReconciliationService`, manual ticking, see DATABASE section 16 |
+| P11-Q5 | One drawer per counter? | **Yes** | A drawer per person; the account is stamped on each payment by a database trigger |
+
+### Findings
+| # | Finding | What was done |
+|---|---|---|
+| P11-05 | One drawer per counter cannot work with "the account is the method's account": the same Cash method must land in different drawers, and re-assigning a cashier must not move yesterday's cash | The account is now **stamped on the row when it is made**. A trigger does it, so none of the eleven actions that create payments had to change and none can forget. This replaced P11-D1's "through the payment method" and removed its drawback (re-pointing a method moved its history) |
+| P11-06 | A full-suite run was started while files were still being edited; its 95 errors were mostly caused by that | Runs are now started only when the code is at rest, into a log file |
+| P11-07 | An automatic index name was longer than MariaDB allows (64 characters); every test then repeated the whole migration and the run looked hung | The index is named by hand |
+| P11-08 | Locking the documents inside a closed statement (so a sale or expense on it cannot be cancelled) would mean changing the cancel actions of earlier phases | Not done: the integrity check reports it instead. Open point in PHASE11_REPORT section 7 |

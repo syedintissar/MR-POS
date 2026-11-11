@@ -304,6 +304,24 @@ All reports have a date filter, search, a print view, and PDF export. CSV/XLSX e
 ### 3.18 Backup & restore (BKP)
 Full specification: [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Summary of the Must items: automatic scheduled backups (with catch-up after the PC was off), a manual "Backup Now", tiers (daily/weekly/monthly/manual/safety), configurable retention, backup history with status, download, integrity verification (checksum plus a test restore), protection from unauthorized users, inclusion of uploaded files, off-site copies with a pending/retry queue, admin warnings, and a safe restore (verify → warn → re-authenticate → safety backup → restore → migrate → audit).
 
+### 3.19 Cash & bank (CSH), added in Phase 11
+This is **not** a general ledger (still out of scope, §1.3): it answers only "where is the money and does the drawer agree with the book".
+
+| ID | Requirement | Priority |
+|---|---|---|
+| CSH-01 | Money accounts of kind cash, bank or wallet. Every payment method except customer credit pays into one account; a method without an account is pointed out. | M |
+| CSH-02 | The balance of an account is added up from the posted customer receipts and refunds, supplier payments and refunds, expenses, and cash & bank entries. A cancelled document counts nowhere. No balance is stored. | M |
+| CSH-03 | The book of an account for a period: balance brought forward, every movement with its document, money in, money out, running balance; printable. | M |
+| CSH-04 | Entries for money that moves on its own: transfer between two accounts, owner money in, owner money out, opening balance (once per account). They never change profit. BR-01 applies: cancelled, never edited or deleted. | M |
+| CSH-05 | Cash cannot leave a cash account that does not hold it in the book; bank and wallet accounts may be overdrawn. | M |
+| CSH-06 | Day closing of a cash account: the count (by notes 5000, 1000, 500, 100, 50, 20, 10 and coins, or as a total) against the book at that moment; exact, short or over. A difference requires an explanation and is recorded as an entry so the book equals the count. | M |
+| CSH-07 | Only the latest closing of an account can be cancelled, with its difference entry. | M |
+| CSH-08 | Every entry, closing, cancellation, account change and change of a method's account is audited (BR-12). | M |
+| CSH-09 | Bank statement matching: the lines of a bank or wallet account are ticked against a statement (last day, closing balance); it is completed only when opening + ticked in - ticked out equals the statement balance; a line is matched once; the next statement opens with the last closing balance; only the latest can be cancelled. | M (owner decision P11-Q3) |
+| CSH-10 | One drawer per counter: a person can have a cash drawer of their own; the cash they take or pay lands there. Every receipt, payment and expense remembers the account it landed in, so a later change of drawer or of a method's account never moves history. | M (P11-Q5) |
+| CSH-11 | A reminder on the dashboard and the till when a drawer took or paid cash on an earlier day and has not been counted since. Selling is never blocked. | M (P11-Q2) |
+| CSH-12 | Cash short or over found at a day closing is a line in net profit (never gross). | M (P11-Q4) |
+
 ---
 
 ## 4. Non-functional requirements

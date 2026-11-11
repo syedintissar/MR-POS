@@ -100,11 +100,12 @@ class FinanceReports
             $line('Service parts written off', Decimal::neg($p['service_written_off'], 2), 'parts taken off a job and thrown away'),
             $line('Difference on goods sent back to suppliers', $p['supplier_difference'], 'credit received less the cost of the stock that left'),
             $line('Rounding differences on invoices', $p['rounding'], 'the shop gained when a total was rounded up and gave away when it was rounded down; prices and costs are never changed'),
+            $line('Cash short or over at day closing', $p['cash_difference'], 'what the counts of the drawer found missing (a loss) or extra (a gain)'),
             $line('NET PROFIT', $p['net_profit'], '', true),
         ];
         $periods = [];
         foreach ($this->profit->grouped($f->from, $f->to, $f->group) as $r) {
-            $other = Decimal::sub(Decimal::sub(Decimal::add(Decimal::add($r['expenses'], $r['stock_losses'], 2), $r['service_written_off'], 2), $r['supplier_difference'], 2), $r['rounding'], 2);
+            $other = Decimal::sub($r['gross_profit'], $r['net_profit'], 2);   // everything between gross and net
             $periods[] = [
                 'period' => $r['label'], 'product_sales' => $r['sales_net'], 'service' => $r['service_revenue'], 'revenue' => $r['total_revenue'], 'cost' => $r['total_cost'],
                 'gross' => $r['gross_profit'], 'other' => $other, 'net' => $r['net_profit'],
@@ -118,7 +119,7 @@ class FinanceReports
                 $this->col('cost', 'Cost', 'money'), $this->col('gross', 'Gross profit', 'money'), $this->col('other', 'Expenses and losses', 'money'), $this->col('net', 'Net profit', 'money'),
             ], $periods, [
                 'period' => 'Total', 'product_sales' => $p['sales_net'], 'service' => $p['service_revenue'], 'revenue' => $p['total_revenue'], 'cost' => $p['total_cost'], 'gross' => $p['gross_profit'],
-                'other' => Decimal::sub(Decimal::sub(Decimal::add(Decimal::add($p['expenses'], $p['stock_losses'], 2), $p['service_written_off'], 2), $p['supplier_difference'], 2), $p['rounding'], 2), 'net' => $p['net_profit'],
+                'other' => Decimal::sub($p['gross_profit'], $p['net_profit'], 2), 'net' => $p['net_profit'],
             ])
             ->note('Cancelled invoices, returns, expenses and jobs never count. Tax is never revenue. Each cost is the cost recorded when the sale or job happened. Service jobs count on the day they were delivered and invoiced.');
     }
@@ -162,6 +163,6 @@ class FinanceReports
 
         $result->table('Expenses', [$this->col('label', 'What', 'text', 'expenses.view'), $this->col('count', 'Count', 'int', 'expenses.view'), $this->col('amount', 'Amount', 'money', 'expenses.view')], [$r('Expenses recorded', (int) $expenses->n, $expenses->total)]);
 
-        return $result->note('Count the cash in the drawer against the "Net movement" of the Cash row. Cancelled invoices are listed so that none disappears unnoticed.');
+        return $result->note('To count the drawer and record the count, use Cash & bank → Close the day: it compares the cash with the book and keeps any difference on record. Cancelled invoices are listed so that none disappears unnoticed.');
     }
 }
