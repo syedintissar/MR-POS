@@ -1,4 +1,5 @@
 <x-layouts.app title="Point of sale">
+    @include('cashbook._reminder')
     <div x-data="posApp(@js($config))" @keydown.window="onKey($event)" class="space-y-3">
 
         {{-- the sale that was just completed --}}

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PaymentMethod extends Model
@@ -24,6 +25,12 @@ class PaymentMethod extends Model
     protected function casts(): array
     {
         return ['requires_reference' => 'boolean', 'is_active' => 'boolean', 'is_system' => 'boolean', 'sort_order' => 'integer'];
+    }
+
+    /** The cash, bank or wallet account this method pays into (never set for customer credit, which is not money). */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(MoneyAccount::class, 'money_account_id');
     }
 
     public function supplierPayments(): HasMany

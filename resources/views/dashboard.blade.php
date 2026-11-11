@@ -17,6 +17,8 @@
         </div>
     @endif
 
+    @include('cashbook._reminder')
+
     @if($integrity)
         <div class="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             <div class="font-semibold">⚠ Records do not add up ({{ $integrity['total'] }} problem(s), checked {{ \Illuminate\Support\Carbon::parse($integrity['ran_at'])->diffForHumans() }})</div>

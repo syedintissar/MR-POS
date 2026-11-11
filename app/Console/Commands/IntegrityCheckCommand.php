@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\AuditLogger;
+use App\Services\CashBook\BankReconciliationService;
+use App\Services\CashBook\MoneyAccountService;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Purchasing\SupplierAccountService;
@@ -23,7 +25,7 @@ class IntegrityCheckCommand extends Command
 
     protected $description = 'Check that cached totals (stock, supplier and customer balances, bill, invoice, service job and customer payments) agree with their ledgers. Exit code 1 if anything is off.';
 
-    public function handle(InventoryService $inventory, SupplierAccountService $suppliers, SaleAccountService $sales, CustomerAccountService $customers, ServiceJobService $serviceJobs, AuditLogger $audit): int
+    public function handle(InventoryService $inventory, SupplierAccountService $suppliers, SaleAccountService $sales, CustomerAccountService $customers, ServiceJobService $serviceJobs, MoneyAccountService $cashBook, BankReconciliationService $statements, AuditLogger $audit): int
     {
         $problems = [];
 
@@ -51,7 +53,17 @@ class IntegrityCheckCommand extends Command
             $problems[] = $message;
         }
 
-        // Returns are checked inside the sales, customer and supplier services above (Phase 8); later phases add theirs here.
+        // Returns are checked inside the sales, customer and supplier services above (Phase 8).
+
+        // Cash & bank: every day closing agrees with its own figures and with the over / short entry that carries its difference.
+        foreach ($cashBook->findDrift() as $message) {
+            $problems[] = $message;
+        }
+
+        // Bank statements: every line matched on a completed statement is still in the book with the same amounts.
+        foreach ($statements->findDrift() as $message) {
+            $problems[] = $message;
+        }
 
         Cache::forever('integrity.last', ['ran_at' => now()->toDateTimeString(), 'problems' => array_slice($problems, 0, 20), 'total' => count($problems)]);
 
@@ -64,7 +76,7 @@ class IntegrityCheckCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments, invoices, returns and service jobs all agree with their ledgers.');
+        $this->info('Integrity check passed: stock totals, supplier and customer accounts, bill payments, invoices, returns, service jobs and day closings all agree with their ledgers.');
 
         return self::SUCCESS;
     }

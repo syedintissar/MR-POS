@@ -12,10 +12,11 @@
 2. **Suppliers:** add them, then post each supplier's opening balance once (Administrator, with a reason).
 3. **Customers:** import or add them; post each customer's opening balance once (Administrator).
 4. **Open service jobs:** receive each device again as a new job so it has a slip and a history.
-5. `php artisan pos:integrity:check` must say it passed. Make a backup.
+5. **Cash & bank** (Administrator): under *Accounts* check the account names and where each payment method pays into, add your real bank accounts, then enter each account's **opening balance** (count the drawer; read the bank and wallet balances).
+6. `php artisan pos:integrity:check` must say it passed. Make a backup.
 
 ## First week
-Count the cash against the **Closing summary** every evening; check Reports → Profit weekly; look at the Backups page every morning (a red dot means a problem); never edit in the program folder while the shop is open.
+**Close the day** (Cash & bank) every evening and look at any short or over; check Reports → Profit weekly; look at the Backups page every morning (a red dot means a problem); never edit in the program folder while the shop is open.
 
 ## If something goes wrong
 Do not delete anything, make a backup, and use the Recovery Kit.

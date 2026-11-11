@@ -118,6 +118,14 @@ final class PermissionCatalogue
                 'expenses.void' => 'Void expenses',
                 'expense_categories.manage' => 'Manage expense categories',
             ],
+            'Cash & bank' => [
+                'cashbook.view' => 'See the cash and bank accounts, their balances and movements',
+                'cashbook.transact' => 'Record bank deposits, transfers and owner money in or out',
+                'cashbook.close_day' => 'Count the cash drawer and close the day',
+                'cashbook.reconcile' => 'Match a bank or wallet account against its statement',
+                'cashbook.void' => 'Cancel a cash & bank entry, a day closing or a statement matching',
+                'cashbook.manage' => 'Manage accounts, opening balances, drawers and where each payment method pays into',
+            ],
             'Reports' => [
                 'reports.sales' => 'Sales, returns and payment-method reports',
                 'reports.inventory' => 'Stock, movements and low-stock reports',
@@ -175,6 +183,7 @@ final class PermissionCatalogue
             'suppliers.adjust_balance',
             'inventory.void_adjustment',
             'sales.below_min_price',
+            'cashbook.manage',
             'users.manage',
             'roles.manage',
             'settings.manage',
