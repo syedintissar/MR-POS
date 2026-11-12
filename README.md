@@ -28,6 +28,7 @@ Full instructions: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 | [docs/ENVIRONMENT_CHANGES.md](docs/ENVIRONMENT_CHANGES.md) | Every change made to the server PC, and what was *not* done |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases and exit criteria |
 | [docs/INSTALLATION.md](docs/INSTALLATION.md) | Windows setup, LAN access, firewall, scheduler, troubleshooting |
+| [docs/CLIENT_LAPTOP_SETUP.md](docs/CLIENT_LAPTOP_SETUP.md) | Command-by-command install on a fresh laptop (C:\MR-POS, backups on D:, starts by itself) |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Staff guide (grows with each phase) |
 | [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md) | Phase 2 summary for the owner |
 | [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md) | Phase 3 summary for the owner |
