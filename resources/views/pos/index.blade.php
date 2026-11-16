@@ -214,7 +214,7 @@
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <span>Customer: <strong x-text="customer.name"></strong></span>
                             <span class="flex flex-wrap gap-1.5">
-                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="customer.allow_credit" @click="payOnAccount()">Put it all on account</button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="customer.allow_credit" @click="payOnAccount()">Sell on credit (pay later)</button>
                                 <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="creditHeld > 0n" @click="useCustomerCredit()">Use their credit</button>
                             </span>
                         </div>
@@ -223,6 +223,11 @@
                                 <template x-if="balanceAfter !== null"><span class="text-slate-600"> · they will then owe <strong x-text="cfg.currency + ' ' + money(balanceAfter)"></strong></span></template>
                             </div>
                         </template>
+                        <template x-if="parseFloat(onAccount) > 0">
+                            <label class="mt-2 flex flex-wrap items-center gap-2 text-slate-700">Promised to pay by
+                                <input type="date" x-model="pay.dueDate" min="{{ now()->toDateString() }}" class="input h-9 w-44" aria-label="Promised to pay by">
+                                <span class="text-xs text-slate-500">optional: the dashboard reminds you</span></label>
+                        </template>
                         <template x-if="overLimit">
                             <div class="mt-1 text-red-700">This is over their credit limit of <span x-text="cfg.currency + ' ' + money(customer.credit_limit)"></span>. A manager must approve it.</div>
                         </template>
@@ -230,6 +235,17 @@
                             <div class="mt-1 text-blue-700">They hold <span x-text="cfg.currency + ' ' + money(customer.advance)"></span> of credit from earlier payments.</div>
                         </template>
                     </div>
+                </template>
+
+                {{-- credit is a way to pay like cash or Easypaisa: say how to get to it instead of hiding it --}}
+                <template x-if="!customer">
+                    <div class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-600" id="pos-pay-credit-hint">
+                        <span>Selling on <strong>credit</strong> (pay later)? Choose the customer first, so it goes on their account.</span>
+                        <button type="button" class="btn btn-secondary btn-sm" data-no-loading x-show="cfg.can.customers" @click="chooseCustomerForCredit()">Choose customer</button>
+                    </div>
+                </template>
+                <template x-if="customer && !customer.allow_credit">
+                    <p class="mt-1 text-sm text-slate-500">This customer is <strong>cash only</strong>. To sell to them on credit, a manager ticks "Allow credit" on the customer's page.</p>
                 </template>
 
                 <p class="mt-2 text-sm text-red-600" x-show="pay.error || payProblem" x-text="pay.error || payProblem"></p>
@@ -286,6 +302,9 @@
                             <input type="text" x-model="cust.form.company" maxlength="150" placeholder="Company (optional)" class="input" aria-label="Company">
                             <label class="flex items-center gap-2 text-sm text-amber-800" x-show="cust.duplicate"><input type="checkbox" x-model="cust.allow" class="rounded border-slate-300"> This is a different person with the same number: save anyway</label>
                             <p class="text-sm text-red-600" x-show="cust.error" x-text="cust.error"></p>
+                            @if($config['can']['setCredit'])
+                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" x-model="cust.form.allow_credit" class="rounded border-slate-300"> Allow this customer to buy on credit (pay later)</label>
+                            @endif
                             <p class="text-xs text-slate-500">Credit terms and wholesale prices are set by a manager on the customer's page.</p>
                             <div class="flex justify-end gap-2">
                                 <button type="button" class="btn btn-secondary" data-no-loading @click="cust.adding = false; cust.error = ''">Back</button>

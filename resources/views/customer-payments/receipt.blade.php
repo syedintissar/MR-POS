@@ -44,8 +44,10 @@
     <div class="c">
         @if($logo)<img src="{{ $logo }}" alt="" class="logo">@endif
         <div class="shop">{{ $shop }}</div>
+        @if($s->string('shop.tagline'))<div class="small">{{ $s->string('shop.tagline') }}</div>@endif
         @if($s->string('shop.address'))<div>{{ $s->string('shop.address') }}</div>@endif
         @if($s->string('shop.phone'))<div>Tel: {{ $s->string('shop.phone') }}</div>@endif
+        @if($s->string('shop.email'))<div class="small">{{ $s->string('shop.email') }}</div>@endif
     </div>
 
     @if($voided)<div class="banner">*** VOID ***</div>@elseif($duplicate)<div class="banner">DUPLICATE</div>@endif

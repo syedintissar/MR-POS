@@ -107,7 +107,7 @@
                     <tr><td class="font-mono text-xs">@can('purchases.view')<a href="{{ route('purchases.show', $p) }}">{{ $p->label() }}</a>@else{{ $p->label() }}@endcan</td>
                         <td class="whitespace-nowrap">{{ $p->purchase_date->format('d M Y') }}</td>
                         <td class="text-right">{{ Money::format($p->grand_total) }}</td>
-                        <td>@if($p->isDraft())<span class="badge badge-gray">Draft</span>@elseif($p->isVoided())<span class="badge badge-red">Cancelled</span>@elseif($p->payment_status === 'paid')<span class="badge badge-green">Paid</span>@else<span class="badge badge-amber">{{ $p->payment_status === 'partial' ? 'Part paid' : 'Unpaid' }}</span>@endif</td></tr>
+                        <td>@if($p->isDraft())<span class="badge badge-amber" title="Not received yet: no stock added, nothing on the supplier's account">Draft · not received</span>@elseif($p->isVoided())<span class="badge badge-red">Cancelled</span>@elseif($p->payment_status === 'paid')<span class="badge badge-green">Paid</span>@else<span class="badge badge-amber">{{ $p->payment_status === 'partial' ? 'Part paid' : 'Unpaid' }}</span>@endif</td></tr>
                 @empty<tr><td class="px-4 py-6 text-center text-slate-500">No purchases yet.</td></tr>@endforelse
                 </tbody></table>
             </div>

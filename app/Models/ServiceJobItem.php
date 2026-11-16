@@ -24,7 +24,7 @@ class ServiceJobItem extends Model
     {
         return [
             'quantity' => 'decimal:3', 'unit_price' => 'decimal:2', 'unit_cost' => 'decimal:4', 'discount_amount' => 'decimal:2',
-            'tax_rate' => 'decimal:2', 'line_total' => 'decimal:2', 'added_at' => 'datetime', 'removed_at' => 'datetime',
+            'tax_rate' => 'decimal:2', 'line_total' => 'decimal:2', 'outside_part' => 'boolean', 'added_at' => 'datetime', 'removed_at' => 'datetime',
         ];
     }
 
@@ -51,6 +51,18 @@ class ServiceJobItem extends Model
     public function isPart(): bool
     {
         return $this->line_type === self::PART;
+    }
+
+    /** A part bought outside for this job: billed and costed like a part, but it never was in stock. */
+    public function isOutsidePart(): bool
+    {
+        return (bool) $this->outside_part;
+    }
+
+    /** Counts in the job's parts figures (amount and cost): a part from stock or one bought outside. */
+    public function countsAsPart(): bool
+    {
+        return $this->isPart() || $this->isOutsidePart();
     }
 
     public function isActive(): bool

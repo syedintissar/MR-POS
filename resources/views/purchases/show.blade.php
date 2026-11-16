@@ -61,7 +61,8 @@
                 @foreach($purchase->items as $item)
                     <tr>
                         <td><a href="{{ route('products.show', $item->product) }}" class="font-medium text-slate-900">{{ $item->product->name }}</a><div class="font-mono text-xs text-slate-500">{{ $item->product->sku }}</div></td>
-                        <td class="text-right">{{ Decimal::trim((string) $item->quantity) }} <span class="text-xs text-slate-400">{{ $item->product->unit->short_name }}</span></td>
+                        <td class="text-right">{{ Decimal::trim((string) $item->quantity) }} <span class="text-xs text-slate-400">{{ $item->product->unit->short_name }}</span>
+                            @if($pack = $item->product->pack())<div class="text-xs text-slate-500">= {{ Decimal::trim(bcdiv((string) $item->quantity, $pack['factor'], 3)) }} {{ $pack['unit'] }}</div>@endif</td>
                         <td class="text-right text-slate-600">{{ Money::format($item->unit_cost, 2) }}</td>
                         <td class="text-right text-slate-500">{{ (float) $item->discount_amount ? Money::format($item->discount_amount) : '' }}</td>
                         <td class="text-right text-slate-500">{{ (float) $item->tax_amount ? Money::format($item->tax_amount) : '' }}</td>
@@ -83,6 +84,15 @@
                 @if($purchase->isReceived())
                     <div class="flex justify-between text-emerald-700"><span>Paid</span><span>{{ Money::format($purchase->paid_amount) }}</span></div>
                     <div class="flex justify-between font-semibold {{ (float) $purchase->due_amount > 0 ? 'text-amber-700' : 'text-slate-500' }}"><span>Still to pay</span><span>{{ Money::format($purchase->due_amount) }}</span></div>
+                @endif
+                @if(! $purchase->isVoided() && ((float) $purchase->due_amount > 0 || $purchase->isDraft()))
+                    @php($late = $purchase->due_date && $purchase->due_date->isPast() && ! $purchase->due_date->isToday() && ! $purchase->isDraft())
+                    <form method="POST" action="{{ route('purchases.due-date', $purchase) }}" class="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2">
+                        @csrf
+                        <div><label class="label" for="due_date">Pay by @if($late)<span class="badge badge-red">overdue</span>@endif</label>
+                            <input id="due_date" type="date" name="due_date" value="{{ optional($purchase->due_date)->toDateString() }}" class="input h-9 w-44" @cannot('purchases.create') disabled @endcannot></div>
+                        @can('purchases.create')<button class="btn btn-secondary btn-sm" data-loading-text="Saving…">Save date</button>@endcan
+                    </form>
                 @endif
             </div>
 

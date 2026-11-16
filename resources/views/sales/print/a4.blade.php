@@ -49,6 +49,7 @@
             <td style="width:60%">
                 @if($logo)<img src="{{ $logo }}" alt="" class="logo"><br>@endif
                 <span class="shop">{{ $shop }}</span><br>
+                @if($s->string('shop.tagline'))<span class="small">{{ $s->string('shop.tagline') }}</span><br>@endif
                 <span class="small muted">{{ $s->string('shop.address') }}</span><br>
                 <span class="small muted">{{ collect([$s->string('shop.phone') ? 'Tel: '.$s->string('shop.phone') : null, $s->string('shop.email'), $s->string('shop.ntn') ? 'NTN: '.$s->string('shop.ntn') : null])->filter()->implode('  ·  ') }}</span>
                 @if($s->string('receipt.header'))<br><span class="small">{{ $s->string('receipt.header') }}</span>@endif

@@ -44,10 +44,11 @@ class CustomerPaymentController extends Controller
             'customer_id' => ['nullable', 'integer'], 'method' => ['nullable', 'integer'], 'status' => ['nullable', 'in:all,posted,voided'],
             'source' => ['nullable', 'in:collected,till,all'], 'from' => ['nullable', 'date'], 'to' => ['nullable', 'date'], 'q' => ['nullable', 'string', 'max:100'],
         ]);
-        $source = $request->input('source', 'collected');
+        $source = $request->input('source', 'all');   // a sale paid at the till is a customer payment too: show it without being asked
 
-        $query = CustomerPayment::query()->where('type', 'receipt')->whereHas('customer', fn ($q) => $q->where('is_walk_in', false))
-            ->when($source === 'collected', fn ($q) => $q->whereNull('sale_id'))
+        // walk-in sales are listed too (they are money received), although the walk-in customer keeps no account
+        $query = CustomerPayment::query()->where('type', 'receipt')
+            ->when($source === 'collected', fn ($q) => $q->whereNull('sale_id')->whereHas('customer', fn ($c) => $c->where('is_walk_in', false)))
             ->when($source === 'till', fn ($q) => $q->whereNotNull('sale_id'))
             ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
             ->when($request->filled('method'), fn ($q) => $q->where('payment_method_id', $request->integer('method')))
@@ -62,7 +63,7 @@ class CustomerPaymentController extends Controller
         $total = (clone $query)->reorder()->where('status', 'posted')->sum('amount');
 
         return view('customer-payments.index', [
-            'payments' => $query->with(['customer:id,name,code', 'method:id,name'])->orderByDesc('payment_date')->orderByDesc('id')->paginate(25)->withQueryString(),
+            'payments' => $query->with(['customer:id,name,code,is_walk_in', 'method:id,name', 'sale:id,invoice_no'])->orderByDesc('payment_date')->orderByDesc('id')->paginate(25)->withQueryString(),
             'customers' => Customer::query()->where('is_walk_in', false)->orderBy('name')->get(['id', 'name']),
             'methods' => PaymentMethod::query()->orderBy('sort_order')->get(['id', 'name']),
             'total' => (string) $total,

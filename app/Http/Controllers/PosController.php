@@ -79,6 +79,7 @@ class PosController extends Controller
                     'complete' => $user->can('sales.create'),
                     'credit' => $user->can('sales.credit'),
                     'overrideLimit' => $user->can('sales.override_credit_limit'),
+                    'setCredit' => $user->can('sales.override_credit_limit') && $user->can('customers.create'),
                     'customers' => $user->can('customers.view'),
                     'addCustomer' => $user->can('customers.create'),
                     'seeBalance' => $money,
@@ -170,6 +171,7 @@ class PosController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             'print_notes' => ['nullable', 'boolean'],
             'expected_total' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:today'],
             'approval_token' => ['nullable', 'string', 'max:80'],
         ], ['decimal' => 'Too many decimal places.']);
 

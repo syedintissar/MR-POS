@@ -63,6 +63,20 @@ class SaleController extends Controller
         ]);
     }
 
+    /** When the customer promised to pay what is left on this invoice: set, moved or cleared (the dashboard reminds). */
+    public function dueDate(Request $request, Sale $sale): RedirectResponse
+    {
+        $this->authorizeSale($request->user(), $sale);
+        $this->authorize('customer_payments.create');
+        $d = $request->validate(['due_date' => ['nullable', 'date']]);
+        if ($sale->isVoided() || $sale->customer->is_walk_in) {
+            return back()->with('error', 'A date to pay by is only kept for an invoice left on a customer\'s account.');
+        }
+        $sale->forceFill(['due_date' => $d['due_date'] ?? null])->save();
+
+        return back()->with('success', $sale->due_date ? 'Promised by '.$sale->due_date->format('d M Y').'.' : 'The promised date was cleared.');
+    }
+
     public function show(Request $request, Sale $sale): View
     {
         $this->authorizeSale($request->user(), $sale);

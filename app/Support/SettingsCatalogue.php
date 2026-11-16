@@ -17,11 +17,12 @@ final class SettingsCatalogue
     {
         return [
             // ---- Shop profile -------------------------------------------------
-            'shop.name' => ['group' => 'shop', 'type' => 'string', 'default' => 'Mr Printer & Tuner', 'label' => 'Shop name', 'rules' => 'required|string|max:150'],
-            'shop.address' => ['group' => 'shop', 'type' => 'text', 'default' => '', 'label' => 'Address', 'rules' => 'nullable|string|max:500'],
-            'shop.phone' => ['group' => 'shop', 'type' => 'string', 'default' => '', 'label' => 'Phone', 'rules' => 'nullable|string|max:60'],
+            'shop.name' => ['group' => 'shop', 'type' => 'string', 'default' => 'MR TECH', 'label' => 'Shop name', 'rules' => 'required|string|max:150'],
+            'shop.tagline' => ['group' => 'shop', 'type' => 'text', 'default' => 'Deal in: Photocopier, Printer, Projector, Scanner, Label, Thermal Printer, Sale & Services, General Order Suppliers', 'label' => 'Line under the shop name', 'rules' => 'nullable|string|max:300', 'help' => 'What the shop deals in. Printed under the name on receipts and invoices.'],
+            'shop.address' => ['group' => 'shop', 'type' => 'text', 'default' => 'Shop # 14B, Ground Floor, Taj Mahal Plaza, 6th Road, Rawalpindi', 'label' => 'Address', 'rules' => 'nullable|string|max:500'],
+            'shop.phone' => ['group' => 'shop', 'type' => 'string', 'default' => '0313-5556182', 'label' => 'Phone', 'rules' => 'nullable|string|max:60'],
             'shop.whatsapp' => ['group' => 'shop', 'type' => 'string', 'default' => '', 'label' => 'WhatsApp', 'rules' => 'nullable|string|max:60'],
-            'shop.email' => ['group' => 'shop', 'type' => 'string', 'default' => '', 'label' => 'Email', 'rules' => 'nullable|email|max:150'],
+            'shop.email' => ['group' => 'shop', 'type' => 'string', 'default' => 'mrtec.555@gmail.com', 'label' => 'Email', 'rules' => 'nullable|email|max:150'],
             'shop.logo_path' => ['group' => 'shop', 'type' => 'string', 'default' => '', 'label' => 'Logo file', 'rules' => 'nullable|string|max:255', 'hidden' => true],
             'shop.ntn' => ['group' => 'shop', 'type' => 'string', 'default' => '', 'label' => 'NTN / STRN', 'rules' => 'nullable|string|max:40', 'help' => 'Printed on invoices when filled in.'],
 
@@ -68,7 +69,7 @@ final class SettingsCatalogue
 
             // ---- Receipt / invoice text ------------------------------------------
             'receipt.header' => ['group' => 'receipt', 'type' => 'text', 'default' => '', 'label' => 'Extra header text', 'rules' => 'nullable|string|max:300'],
-            'receipt.footer' => ['group' => 'receipt', 'type' => 'text', 'default' => 'Thank you for shopping at Mr Printer & Tuner!', 'label' => 'Footer message', 'rules' => 'nullable|string|max:300'],
+            'receipt.footer' => ['group' => 'receipt', 'type' => 'text', 'default' => 'Thank you for shopping at MR TECH!', 'label' => 'Footer message', 'rules' => 'nullable|string|max:300'],
             'receipt.show_logo' => ['group' => 'receipt', 'type' => 'bool', 'default' => true, 'label' => 'Show logo', 'rules' => 'boolean'],
             'receipt.show_cashier' => ['group' => 'receipt', 'type' => 'bool', 'default' => true, 'label' => 'Show cashier name', 'rules' => 'boolean'],
             'receipt.service_terms' => ['group' => 'receipt', 'type' => 'text', 'default' => 'Devices not collected within 30 days of notification are not our responsibility. Please bring this slip when collecting.', 'label' => 'Service job terms', 'rules' => 'nullable|string|max:1000'],

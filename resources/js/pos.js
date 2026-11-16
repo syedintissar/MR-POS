@@ -305,7 +305,15 @@ export function posApp(cfg, env = {}) {
         openCustomer() {
             if (!this.cfg.can.customers || this.submitting || this.pay.open) return;
             clearTimeout(this.cust.timer);
-            this.cust = { open: true, query: '', results: [], busy: false, seq: this.cust.seq + 1, timer: null, adding: false, form: { name: '', phone: '', company: '' }, error: '', duplicate: false, allow: false };
+            this.cust = { open: true, query: '', results: [], busy: false, seq: this.cust.seq + 1, timer: null, adding: false, form: { name: '', phone: '', company: '', allow_credit: false }, error: '', duplicate: false, allow: false };
+        },
+
+        /** From the payment box: a credit sale needs a named customer, so go and choose (or add) one. */
+        chooseCustomerForCredit() {
+            if (!this.cfg.can.customers || this.submitting) return;
+            this.closePayment();
+            this.openCustomer();
+            this.cust.form.allow_credit = !!this.cfg.can.setCredit;
         },
 
         closeCustomer() {
@@ -359,6 +367,7 @@ export function posApp(cfg, env = {}) {
             try {
                 const r = await this.http('POST', this.cfg.urls.customerStore, {
                     name: f.name.trim(), phone: f.phone.trim() || null, company: f.company.trim() || null, allow_duplicate_phone: this.cust.allow,
+                    allow_credit: !!(this.cfg.can.setCredit && f.allow_credit),
                 });
                 if (r.ok) { this.useCustomer(r.data); return; }
                 if (r.status === 409 && r.data?.error === 'duplicate_phone') {
@@ -468,7 +477,7 @@ export function posApp(cfg, env = {}) {
             if (!this.lines.length || this.submitting) return;
             if (this.problems.length) { this.error = this.problems[0]; return; }
             this.error = '';
-            this.pay = { open: true, rows: [{ method: this.cashMethod?.id ?? null, amount: parse(this.total, 2) > 0n ? this.total : '', reference: '' }], error: '' };
+            this.pay = { open: true, rows: [{ method: this.cashMethod?.id ?? null, amount: parse(this.total, 2) > 0n ? this.total : '', reference: '' }], error: '', dueDate: '' };
         },
 
         closePayment() { this.pay.open = false; },
@@ -561,6 +570,7 @@ export function posApp(cfg, env = {}) {
                 notes: this.notes.trim() || null,
                 print_notes: this.printNotes,
                 expected_total: this.total,
+                due_date: parse(this.onAccount, 2) > 0n && this.pay.dueDate ? this.pay.dueDate : null,
                 approval_token: this.approvalToken,
             };
         },

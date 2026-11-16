@@ -318,6 +318,57 @@ class CustomerPaymentWebTest extends TestCase
         $this->as('Manager')->get('/customer-payments?source=all&status=posted&from=2020-01-01&to=2099-01-01&q=RCP')->assertOk();
     }
 
+    public function test_the_list_shows_what_was_paid_at_the_till_as_well_including_walk_in_sales(): void
+    {
+        $cashier = User::factory()->withRole('Cashier')->create();
+        $sell = fn (?Customer $c, string $price) => app(CompleteSale::class)->execute([
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $c?->id,
+            'lines' => [['product_id' => $this->stocked('50', '10', ['sale_price' => $price])->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => $price]],
+        ], $cashier);
+        $walkIn = $sell(null, '111');
+        $named = $sell($this->customer, '222');
+        $this->invoice('500');
+        $this->as('Manager');
+        $this->collect('40')->assertRedirect();
+
+        // nothing chosen: everything, each till payment pointing at its sale
+        $this->get('/customer-payments')->assertOk()
+            ->assertSee('Sale '.$walkIn->invoice_no)->assertSee('Sale '.$named->invoice_no)->assertSee('111.00')->assertSee('222.00')->assertSee('40.00');
+        $this->get('/customer-payments?source=till')->assertOk()->assertSee('111.00')->assertSee('222.00')->assertDontSee('40.00');
+        $this->get('/customer-payments?source=collected')->assertOk()->assertDontSee('111.00')->assertDontSee('222.00')->assertSee('40.00');
+    }
+
+    public function test_a_credit_sale_keeps_the_date_the_customer_promised_and_the_dashboard_reminds(): void
+    {
+        $p = $this->stocked('50', '10', ['sale_price' => '900']);
+        $this->as('Manager');
+        $promised = now()->addDays(3)->toDateString();
+
+        $r = $this->postJson('/pos/sales', [
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $this->customer->id, 'lines' => [['product_id' => $p->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => '400']], 'due_date' => $promised,
+        ])->assertCreated();
+        $sale = Sale::query()->findOrFail($r->json('sale_id'));
+        $this->assertSame('500.00', (string) $sale->due_amount);
+        $this->assertSame($promised, $sale->due_date->toDateString());
+        $this->postJson('/pos/sales', [
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $this->customer->id, 'lines' => [['product_id' => $p->id, 'quantity' => '1']],
+            'due_date' => now()->subDay()->toDateString(),
+        ])->assertStatus(422);
+
+        $this->as('Admin');
+        $this->get('/')->assertOk()->assertSee('Money to collect from customers')->assertSee($sale->invoice_no)->assertSee('in 3 days')->assertSee('Debtor Danish');
+
+        $this->post("/sales/{$sale->id}/due-date", ['due_date' => now()->subDays(2)->toDateString()])->assertSessionHas('success');
+        $this->get('/')->assertOk()->assertSee('overdue 2 days');
+        $this->get("/sales/{$sale->id}")->assertOk()->assertSee('Promised to pay by')->assertSee('overdue');
+
+        // once it is paid it stops being a reminder
+        $this->collect('500')->assertRedirect();
+        $this->get('/')->assertOk()->assertDontSee('Money to collect from customers');
+    }
+
     private function collectedAs(string $role): void
     {
         $this->as($role);

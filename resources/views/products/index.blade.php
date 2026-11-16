@@ -30,7 +30,7 @@
     <div class="card overflow-x-auto">
         <table class="table">
             <thead><tr>
-                <th>SKU</th><th>Product</th><th>Category</th><th class="text-right">Stock</th><th class="text-right">Price</th>
+                <th class="w-14"></th><th>SKU</th><th>Product</th><th>Brand</th><th>Model</th><th>Category</th><th class="text-right">Stock</th><th class="text-right">Price</th>
                 @can('products.view_cost')<th class="text-right">Avg cost</th>@endcan
                 <th>Status</th><th></th>
             </tr></thead>
@@ -42,11 +42,20 @@
                     $low = (float) $p->lowStockLevel($threshold);
                 @endphp
                 <tr>
+                    <td class="py-1.5">
+                        @if($p->image_path)
+                            <a href="{{ route('products.show', $p) }}"><img src="{{ route('products.image', $p) }}?v={{ $p->updated_at?->timestamp }}" alt="" loading="lazy" class="h-11 w-11 rounded border border-slate-200 bg-white object-contain"></a>
+                        @else
+                            <div class="flex h-11 w-11 items-center justify-center rounded border border-dashed border-slate-200 text-[10px] text-slate-300">no pic</div>
+                        @endif
+                    </td>
                     <td class="whitespace-nowrap font-mono text-xs text-slate-600">{{ $p->sku }}</td>
                     <td>
                         <a href="{{ route('products.show', $p) }}" class="font-medium text-slate-900 hover:text-brand-700">{{ $p->name }}</a>
-                        <div class="text-xs text-slate-500">{{ collect([$p->brand?->name, $p->model])->filter()->implode(' · ') }}@if(! $isStock) <span class="badge badge-blue ml-1">service</span>@endif</div>
+                        @if(! $isStock)<span class="badge badge-blue ml-1">service</span>@endif
                     </td>
+                    <td class="text-slate-600">{{ $p->brand?->name ?? '—' }}</td>
+                    <td class="text-slate-600">{{ $p->model ?: '—' }}</td>
                     <td class="text-slate-600">{{ $p->category?->parent ? $p->category->parent->name.' › ' : '' }}{{ $p->category?->name }}</td>
                     <td class="whitespace-nowrap text-right">
                         @if($isStock)
@@ -64,7 +73,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" class="px-4 py-12 text-center text-slate-500">
+                <tr><td colspan="11" class="px-4 py-12 text-center text-slate-500">
                     @if(request()->query())No products match these filters.
                     @else No products yet. @can('products.create')<a href="{{ route('products.create') }}">Add the first one</a>@endcan @can('products.import') or <a href="{{ route('products.import') }}">import a list from Excel</a>@endcan.
                     @endif

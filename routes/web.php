@@ -137,6 +137,7 @@ Route::middleware('auth')->group(function () {
         Route::get('{sale}/print/{format}', [SaleController::class, 'print'])->whereNumber('sale')->middleware('signed')->name('sales.print');
         Route::get('{sale}/reprint/{format}', [SaleController::class, 'reprint'])->whereNumber('sale')->name('sales.reprint');
         Route::get('{sale}/pdf', [SaleController::class, 'pdf'])->whereNumber('sale')->name('sales.pdf');
+        Route::post('{sale}/due-date', [SaleController::class, 'dueDate'])->whereNumber('sale')->middleware('can:customer_payments.create')->name('sales.due-date');
         Route::post('{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.void', 'password.confirm'])->name('sales.void');
     });
 
@@ -347,6 +348,7 @@ Route::middleware('auth')->group(function () {
         });
         Route::get('{purchase}', [PurchaseController::class, 'show'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.show');
         Route::get('{purchase}/print', [PurchaseController::class, 'print'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.print');
+        Route::post('{purchase}/due-date', [PurchaseController::class, 'dueDate'])->whereNumber('purchase')->middleware('can:purchases.create')->name('purchases.due-date');
         Route::post('{purchase}/receive', [PurchaseController::class, 'receive'])->whereNumber('purchase')->middleware('can:purchases.receive')->name('purchases.receive');
         Route::post('{purchase}/void', [PurchaseController::class, 'void'])->whereNumber('purchase')->middleware(['can:purchases.void', 'password.confirm'])->name('purchases.void');
     });

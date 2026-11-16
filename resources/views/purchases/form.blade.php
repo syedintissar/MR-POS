@@ -6,6 +6,7 @@
     <script>
         window.purchaseForm = function (initial, supplierId, lookupUrl, taxInCost, totals) {
             const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+            window.num = window.num || num;
             const r2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
             return {
                 lines: initial, supplierId, taxInCost,
@@ -30,7 +31,8 @@
                     if (!this.lines.some(l => l.id === p.id)) {
                         this.lines.push({
                             id: p.id, sku: p.sku, name: p.name, unit: p.unit, allows_decimal: p.allows_decimal, stock: p.stock,
-                            quantity: '', unit_cost: p.supplier_last_cost ?? p.last_cost ?? '', discount_amount: '', tax_amount: '',
+                            quantity: '', unit_cost: this.perPack(p.pack, p.supplier_last_cost ?? p.last_cost ?? ''), discount_amount: '', tax_amount: '',
+                            pack: p.pack ?? null, in_pack: !!p.pack,                       // bought by the kg, kept by the gram
                             last_cost: p.last_cost ?? null,                                // last LANDED cost: what the trend arrow compares with
                             last_price: p.supplier_last_cost ?? p.last_cost ?? null,       // last price on a supplier invoice: shown under the cost box
                         });
@@ -39,6 +41,16 @@
                     this.$nextTick(() => { const el = document.querySelector('[data-qty="' + p.id + '"]'); if (el) el.focus(); });
                 },
                 remove(i) { this.lines.splice(i, 1); },
+                // one packet holds `factor` stock units: a cost per gram becomes a cost per kilogram
+                perPack(pack, cost) { return pack && cost !== '' && cost !== null ? String(r2(num(cost) * num(pack.factor))) : cost; },
+                factor(l) { return l.pack && l.in_pack ? num(l.pack.factor) : 1; },
+                // switch a line between the bought unit and the stock unit, keeping the same goods and the same money
+                toggleUnit(l) {
+                    const f = num(l.pack.factor);
+                    if (l.in_pack) { if (l.quantity !== '') l.quantity = String(Math.round(num(l.quantity) * f * 1000) / 1000); if (l.unit_cost !== '') l.unit_cost = String(Math.round(num(l.unit_cost) / f * 10000) / 10000); }
+                    else { if (l.quantity !== '') l.quantity = String(Math.round(num(l.quantity) / f * 1000) / 1000); if (l.unit_cost !== '') l.unit_cost = String(r2(num(l.unit_cost) * f)); }
+                    l.in_pack = !l.in_pack;
+                },
                 lineTotal(l) { return r2(r2(num(l.quantity) * num(l.unit_cost)) - num(l.discount_amount) + num(l.tax_amount)); },
                 get subtotal() { return r2(this.lines.reduce((s, l) => s + this.lineTotal(l), 0)); },
                 get grand() { return r2(this.subtotal - num(this.discount) + num(this.tax) + num(this.additional)); },
@@ -53,8 +65,9 @@
                     return Math.max(0, (base(l) + share) / q);
                 },
                 trend(l) {
-                    const c = this.landed(l); const last = num(l.last_cost);
-                    if (c === null || !last) return '';
+                    const each = this.landed(l); const last = num(l.last_cost);
+                    if (each === null || !last) return '';
+                    const c = each / this.factor(l);
                     const d = (c - last) / last * 100;
                     if (Math.abs(d) < 0.5) return '';
                     return (d > 0 ? '▲ ' : '▼ ') + Math.abs(d).toFixed(0) + '% vs last landed cost';
@@ -129,9 +142,18 @@
                                     <div class="font-medium text-slate-900" x-text="l.name"></div>
                                     <div class="font-mono text-xs text-slate-500"><span x-text="l.sku"></span> · in stock <span x-text="l.stock"></span> <span x-text="l.unit"></span></div>
                                 </td>
-                                <td><input type="number" :name="'lines[' + i + '][quantity]'" x-model="l.quantity" :data-qty="l.id" :step="l.allows_decimal ? '0.001' : '1'" min="0" required class="input w-24"></td>
+                                <td><input type="number" :name="'lines[' + i + '][quantity]'" x-model="l.quantity" :data-qty="l.id" :step="l.allows_decimal || (l.pack && l.in_pack) ? '0.001' : '1'" min="0" required class="input w-24">
+                                    <template x-if="l.pack">
+                                        <div class="mt-0.5 text-[11px] text-slate-600">
+                                            <input type="hidden" :name="'lines[' + i + '][in_pack]'" :value="l.in_pack ? 1 : 0">
+                                            in <strong x-text="l.in_pack ? l.pack.unit : l.unit"></strong>
+                                            <button type="button" class="underline" data-no-loading @click="toggleUnit(l)" x-text="'use ' + (l.in_pack ? l.unit : l.pack.unit)"></button>
+                                            <span class="block text-slate-500" x-show="l.in_pack && num(l.quantity) > 0" x-text="'= ' + (Math.round(num(l.quantity) * num(l.pack.factor) * 1000) / 1000) + ' ' + l.unit + ' into stock'"></span>
+                                        </div>
+                                    </template></td>
                                 <td><input type="number" :name="'lines[' + i + '][unit_cost]'" x-model="l.unit_cost" step="any" min="0" required class="input w-28">
-                                    <div class="mt-0.5 text-[11px] text-slate-500" x-show="l.last_price">last: <span x-text="l.last_price"></span></div></td>
+                                    <div class="mt-0.5 text-[11px] text-slate-500" x-show="l.pack && l.in_pack">per <span x-text="l.pack && l.pack.unit"></span><span x-show="num(l.unit_cost) > 0" x-text="' = ' + (Math.round(num(l.unit_cost) / num(l.pack ? l.pack.factor : 1) * 10000) / 10000) + ' per ' + l.unit"></span></div>
+                                    <div class="mt-0.5 text-[11px] text-slate-500" x-show="l.last_price">last: <span x-text="l.pack && l.in_pack ? perPack(l.pack, l.last_price) : l.last_price"></span></div></td>
                                 <td><input type="number" :name="'lines[' + i + '][discount_amount]'" x-model="l.discount_amount" step="0.01" min="0" class="input w-24" placeholder="0"></td>
                                 <td><input type="number" :name="'lines[' + i + '][tax_amount]'" x-model="l.tax_amount" step="0.01" min="0" class="input w-24" placeholder="0"></td>
                                 <td class="whitespace-nowrap text-right font-medium" x-text="money(lineTotal(l))"></td>
@@ -179,10 +201,15 @@
 
         @if($canReceive)
             <div class="card">
-                <div class="card-header"><h2 class="card-title">Paid now? (optional)</h2></div>
+                <div class="card-header"><h2 class="card-title">Payment: credit, or paid now by cash / bank / Easypaisa</h2></div>
                 <div class="card-body grid gap-4 sm:grid-cols-3">
-                    <div><label class="label" for="pay_amount">Amount paid at receiving</label>
-                        <input id="pay_amount" name="pay_amount" type="number" step="0.01" min="0" x-model="payAmount" class="input" placeholder="0 = on credit">
+                    <div class="flex flex-wrap items-center gap-2 sm:col-span-3">
+                        <button type="button" class="btn btn-secondary btn-sm" data-no-loading @click="payAmount = ''">All on credit (pay later)</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-no-loading @click="payAmount = grand.toFixed(2)">Paid in full now</button>
+                        <span class="text-sm text-slate-600" x-cloak>Paid now <strong x-text="money(Math.min(num(payAmount), grand))"></strong> · stays on credit with the supplier <strong class="text-amber-700" x-text="money(Math.max(grand - num(payAmount), 0))"></strong></span>
+                    </div>
+                    <div><label class="label" for="pay_amount">Paid now</label>
+                        <input id="pay_amount" name="pay_amount" type="number" step="0.01" min="0" x-model="payAmount" class="input" placeholder="0 = all on credit">
                         <p class="error-text" x-show="overPay" x-cloak>More than the total of this purchase.</p>
                         @error('pay_amount')<p class="error-text">{{ $message }}</p>@enderror</div>
                     <div><label class="label" for="pay_method_id">Paid by</label>
@@ -191,14 +218,24 @@
                         </select>
                         @error('pay_method_id')<p class="error-text">{{ $message }}</p>@enderror</div>
                     <x-form.input name="pay_reference" label="Reference (cheque / transaction no.)" />
-                    <p class="help sm:col-span-3">Used only when you press <strong>Save &amp; receive</strong>. Whatever is not paid now stays on the supplier's account, to be paid later from Supplier payments.</p>
+                    <div x-show="grand - num(payAmount) > 0.001" x-cloak>
+                        <x-form.input name="due_date" label="Pay the rest by" type="date" :value="optional($purchase->due_date)->toDateString()" help="Optional. The dashboard reminds you when it is due." />
+                    </div>
+                    <p class="help sm:col-span-3">Used only when you press <strong>Save &amp; receive stock</strong>. For part cash and part credit, type what you pay now: the rest stays on the supplier's account, to be paid later from Supplier payments.</p>
                 </div>
             </div>
         @endif
 
+        <p class="text-right text-sm text-slate-500">
+            @if($canReceive)
+                <strong>Save &amp; receive stock</strong> adds the stock and puts the bill on the supplier's account. A <strong>draft</strong> does neither: it is only kept for later.
+            @else
+                You can save drafts only. Stock and the supplier's account change when a manager receives the draft.
+            @endif
+        </p>
         <div class="flex flex-wrap justify-end gap-2">
             <a href="{{ $editing ? route('purchases.show', $purchase) : route('purchases.index') }}" class="btn btn-secondary">Cancel</a>
-            <button type="submit" name="action" value="draft" class="btn btn-secondary" :disabled="!hasLines" data-loading-text="Saving…">Save draft</button>
+            <button type="submit" name="action" value="draft" class="btn btn-secondary" :disabled="!hasLines" data-loading-text="Saving…">Save as draft (not received yet)</button>
             @if($canReceive)
                 <button type="submit" name="action" value="receive" class="btn btn-primary" :disabled="!hasLines || overPay" data-loading-text="Receiving…">Save &amp; receive stock</button>
             @endif

@@ -390,7 +390,7 @@ class PosWebTest extends TestCase
 
         foreach (['thermal', 'a4'] as $format) {
             $html = $this->get("/sales/{$sale->id}/reprint/{$format}")->assertOk()->getContent();
-            foreach (['Mr Printer &amp; Tuner', '0300-1112223', $sale->invoice_no, 'Canon ink', '300.00', 'Thank you, come again!', 'SN-42', 'For the office', 'Cash'] as $needle) {
+            foreach (['Mr Printer &amp; Tuner', '0300-1112223', 'Deal in: Photocopier', 'Taj Mahal Plaza', $sale->invoice_no, 'Canon ink', '300.00', 'Thank you, come again!', 'SN-42', 'For the office', 'Cash'] as $needle) {
                 $this->assertStringContainsString($needle, $html, "{$format} receipt lacks {$needle}");
             }
             $this->assertStringContainsString('<svg', $html, 'the invoice number is also a barcode');

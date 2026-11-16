@@ -146,6 +146,19 @@ class PurchaseController extends Controller
         return redirect()->route('purchases.show', $purchase)->with('success', "Purchase {$purchase->purchase_no} received; the stock has been updated.");
     }
 
+    /** When the rest of a credit bill is to be paid: set, moved or cleared at any time (the dashboard reminds). */
+    public function dueDate(Request $request, Purchase $purchase): RedirectResponse
+    {
+        $this->authorize('purchases.create');
+        $d = $request->validate(['due_date' => ['nullable', 'date']]);
+        if ($purchase->isVoided()) {
+            return back()->with('error', 'This purchase was cancelled.');
+        }
+        $purchase->forceFill(['due_date' => $d['due_date'] ?? null])->save();
+
+        return back()->with('success', $purchase->due_date ? 'To be paid by '.$purchase->due_date->format('d M Y').'.' : 'The date to pay by was cleared.');
+    }
+
     public function void(Request $request, Purchase $purchase): RedirectResponse
     {
         $this->authorize('purchases.void');
@@ -174,7 +187,7 @@ class PurchaseController extends Controller
         $this->authorize('purchases.view');
         $request->validate(['q' => ['required', 'string', 'min:1', 'max:100'], 'supplier_id' => ['nullable', 'integer']]);
 
-        $rows = Product::query()->with('unit')->active()->stockItems()->search($request->input('q'))->limit(15)->get();
+        $rows = Product::query()->with(['unit', 'purchaseUnit'])->active()->stockItems()->search($request->input('q'))->limit(15)->get();
         $supplierId = $request->integer('supplier_id');
 
         return response()->json($rows->map(function (Product $p) use ($supplierId) {
@@ -190,6 +203,7 @@ class PurchaseController extends Controller
                 'last_cost' => $p->last_purchase_cost !== null ? Decimal::trim($p->last_purchase_cost) : null,
                 'supplier_last_cost' => $fromSupplier !== null ? Decimal::trim((string) $fromSupplier) : null,
                 'average_cost' => Decimal::trim($p->average_cost),
+                'pack' => $p->pack(),
             ];
         }));
     }
@@ -244,7 +258,7 @@ class PurchaseController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
-        return $request->validate([
+        return $this->inStockUnits($request->validate([
             'action' => ['nullable', 'in:draft,receive'],
             'supplier_id' => ['required', Rule::exists('suppliers', 'id')->whereNull('deleted_at')],
             'supplier_invoice_no' => ['nullable', 'string', 'max:50'],
@@ -259,13 +273,40 @@ class PurchaseController extends Controller
             'lines.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,4'],
             'lines.*.discount_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,2'],
             'lines.*.tax_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,2'],
+            'lines.*.in_pack' => ['nullable', 'boolean'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:purchase_date'],
         ] + $this->paymentRules(), [
             'lines.required' => 'Add at least one product.',
             'lines.*.quantity.gt' => 'Enter a quantity greater than zero.',
             'lines.*.product_id.exists' => 'One of the products is not a stock item any more.',
             'lines.*.unit_cost.required' => 'Enter the cost of every product (0 if it was free).',
             'decimal' => 'Too many decimal places.',
-        ]);
+            'due_date.after_or_equal' => 'The date to pay by cannot be before the purchase date.',
+        ]));
+    }
+
+    /**
+     * Lines typed in the unit the product is bought in (2 kilograms at 2,500 each) become the unit it is kept in (2,000 grams at 2.50 each),
+     * so the stock, the average cost and every report stay in one unit.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function inStockUnits(array $data): array
+    {
+        $packed = array_filter($data['lines'], fn ($l) => filter_var($l['in_pack'] ?? false, FILTER_VALIDATE_BOOLEAN));
+        $products = $packed === [] ? collect() : Product::query()->with('purchaseUnit')->whereIn('id', array_column($packed, 'product_id'))->get()->keyBy('id');
+
+        foreach ($data['lines'] as $i => $l) {
+            $pack = isset($packed[$i]) ? $products->get((int) $l['product_id'])?->pack() : null;
+            if ($pack !== null) {
+                $data['lines'][$i]['quantity'] = Decimal::mul((string) $l['quantity'], $pack['factor'], 3);
+                $data['lines'][$i]['unit_cost'] = bcdiv((string) $l['unit_cost'], $pack['factor'], 4);
+            }
+            unset($data['lines'][$i]['in_pack']);
+        }
+
+        return $data;
     }
 
     /** @return array<string, mixed> */
@@ -280,7 +321,7 @@ class PurchaseController extends Controller
                 'tax_amount' => Decimal::isZero((string) $i->tax_amount) ? '' : Decimal::trim((string) $i->tax_amount),
             ]);
 
-        $products = Product::query()->withTrashed()->with('unit')->whereIn('id', $rows->pluck('product_id')->filter()->map(fn ($id) => (int) $id))->get()->keyBy('id');
+        $products = Product::query()->withTrashed()->with(['unit', 'purchaseUnit'])->whereIn('id', $rows->pluck('product_id')->filter()->map(fn ($id) => (int) $id))->get()->keyBy('id');
         $lines = [];
         foreach ($rows as $r) {
             $p = $products[(int) ($r['product_id'] ?? 0)] ?? null;
@@ -293,6 +334,8 @@ class PurchaseController extends Controller
                 'discount_amount' => (string) ($r['discount_amount'] ?? ''), 'tax_amount' => (string) ($r['tax_amount'] ?? ''),
                 'last_cost' => $p->last_purchase_cost !== null ? Decimal::trim($p->last_purchase_cost) : null,
                 'last_price' => $p->last_purchase_cost !== null ? Decimal::trim($p->last_purchase_cost) : null,
+                // a saved draft is kept in the stock unit; a form sent back after a mistake keeps what was typed
+                'pack' => $p->pack(), 'in_pack' => $p->pack() !== null && filter_var($r['in_pack'] ?? false, FILTER_VALIDATE_BOOLEAN),
             ];
         }
 

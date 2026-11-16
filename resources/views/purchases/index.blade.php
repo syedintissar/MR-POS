@@ -38,7 +38,7 @@
                     <td class="text-right text-slate-600">{{ $p->isReceived() ? \App\Support\Money::format($p->paid_amount) : '' }}</td>
                     <td class="text-right font-medium {{ $p->isReceived() && (float) $p->due_amount > 0 ? 'text-amber-700' : 'text-slate-400' }}">{{ $p->isReceived() ? \App\Support\Money::format($p->due_amount) : '' }}</td>
                     <td>
-                        @if($p->isDraft())<span class="badge badge-gray">Draft</span>
+                        @if($p->isDraft())<span class="badge badge-amber" title="Not received yet: no stock added, nothing on the supplier's account">Draft · not received</span>
                         @elseif($p->isVoided())<span class="badge badge-red">Cancelled</span>
                         @elseif($p->payment_status === 'paid')<span class="badge badge-green">Paid</span>
                         @elseif($p->payment_status === 'partial')<span class="badge badge-amber">Part paid</span>

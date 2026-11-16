@@ -23,6 +23,7 @@ class Purchase extends Model
     protected function casts(): array
     {
         return [
+            'due_date' => 'date',
             'purchase_date' => 'date', 'received_at' => 'datetime', 'voided_at' => 'datetime',
             'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'tax_amount' => 'decimal:2', 'additional_cost' => 'decimal:2',
             'grand_total' => 'decimal:2', 'paid_amount' => 'decimal:2', 'returned_amount' => 'decimal:2', 'due_amount' => 'decimal:2',

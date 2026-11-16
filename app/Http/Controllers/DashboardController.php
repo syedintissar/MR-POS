@@ -80,6 +80,20 @@ class DashboardController extends Controller
             ];
         }
 
+        // Reminders: what falls due within a week (or is already late), to pay to suppliers and to collect from customers.
+        $reminders = null;
+        if ($payables || $receivables) {
+            $soon = now()->addDays(7)->toDateString();
+            $reminders = [
+                'pay' => $payables ? Purchase::query()->with('supplier:id,name')->where('status', Purchase::RECEIVED)->where('due_amount', '>', 0)
+                    ->whereNotNull('due_date')->whereDate('due_date', '<=', $soon)->orderBy('due_date')->orderBy('id')->limit(10)->get() : null,
+                'pay_undated' => $payables ? Purchase::query()->where('status', Purchase::RECEIVED)->where('due_amount', '>', 0)->whereNull('due_date')->count() : 0,
+                'collect' => $receivables ? Sale::query()->completed()->with('customer:id,name,phone')->where('due_amount', '>', 0)
+                    ->whereNotNull('due_date')->whereDate('due_date', '<=', $soon)->orderBy('due_date')->orderBy('id')->limit(10)->get() : null,
+                'collect_undated' => $receivables ? Sale::query()->completed()->where('due_amount', '>', 0)->whereNull('due_date')->count() : 0,
+            ];
+        }
+
         // Service jobs: everybody who may see jobs sees the figures for the jobs they may see (technicians: their own).
         $service = null;
         if ($user->canAny(['service_jobs.view_all', 'service_jobs.view_assigned'])) {
@@ -114,6 +128,7 @@ class DashboardController extends Controller
             'stockAlerts' => $stockAlerts,
             'payables' => $payables,
             'receivables' => $receivables,
+            'reminders' => $reminders,
             'salesToday' => $salesToday,
             'integrity' => $integrity && ($integrity['total'] ?? 0) > 0 ? $integrity : null,
             'warnings' => $warnings,

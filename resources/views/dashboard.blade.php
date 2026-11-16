@@ -208,6 +208,68 @@
             </div>
         </section>
     @endif
+    {{-- payment reminders: what is due within a week or already late --}}
+    @if($reminders && (($reminders['pay'] && $reminders['pay']->isNotEmpty()) || ($reminders['collect'] && $reminders['collect']->isNotEmpty()) || $reminders['pay_undated'] || $reminders['collect_undated']))
+        @php
+            $today = now()->startOfDay();
+            $when = function ($date) use ($today) {
+                $days = (int) $today->diffInDays($date->copy()->startOfDay(), false);
+
+                return $days < 0 ? ['badge-red', 'overdue '.abs($days).' day'.(abs($days) === 1 ? '' : 's')]
+                    : ($days === 0 ? ['badge-amber', 'due today'] : ['badge-gray', 'in '.$days.' day'.($days === 1 ? '' : 's')]);
+            };
+        @endphp
+        <div class="mb-4 grid gap-4 lg:grid-cols-2" id="payment-reminders">
+            @if($reminders['pay'] !== null)
+                <div class="card">
+                    <div class="card-header flex items-center justify-between"><h2 class="card-title">Payments to make to suppliers</h2>
+                        @can('purchases.view')<a href="{{ route('purchases.index', ['status' => 'received', 'payment' => 'unpaid']) }}" class="text-xs">All unpaid bills</a>@endcan</div>
+                    @if($reminders['pay']->isEmpty())
+                        <p class="px-5 py-4 text-sm text-slate-500">Nothing falls due in the next 7 days.</p>
+                    @else
+                        <table class="table">
+                            <tbody>
+                            @foreach($reminders['pay'] as $bill)
+                                @php([$badge, $label] = $when($bill->due_date))
+                                <tr>
+                                    <td><span class="badge {{ $badge }}">{{ $label }}</span></td>
+                                    <td>{{ $bill->supplier->name }} <span class="text-xs text-slate-500">· @can('purchases.view')<a href="{{ route('purchases.show', $bill) }}">{{ $bill->purchase_no }}</a>@else{{ $bill->purchase_no }}@endcan · {{ $bill->due_date->format('d M') }}</span></td>
+                                    <td class="text-right font-medium">{{ \App\Support\Money::format($bill->due_amount) }}</td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    @endif
+                    @if($reminders['pay_undated'])<p class="border-t border-slate-100 px-5 py-2 text-xs text-slate-500">{{ $reminders['pay_undated'] }} unpaid bill(s) have no date to pay by: open the bill to set one.</p>@endif
+                </div>
+            @endif
+            @if($reminders['collect'] !== null)
+                <div class="card">
+                    <div class="card-header flex items-center justify-between"><h2 class="card-title">Money to collect from customers</h2>
+                        @can('reports.customers')<a href="{{ route('receivables.index') }}" class="text-xs">Who owes us</a>@endcan</div>
+                    @if($reminders['collect']->isEmpty())
+                        <p class="px-5 py-4 text-sm text-slate-500">No promised payment falls due in the next 7 days.</p>
+                    @else
+                        <table class="table">
+                            <tbody>
+                            @foreach($reminders['collect'] as $inv)
+                                @php([$badge, $label] = $when($inv->due_date))
+                                <tr>
+                                    <td><span class="badge {{ $badge }}">{{ $label }}</span></td>
+                                    <td>{{ $inv->customer->name }}@if($inv->customer->phone) <span class="text-xs text-slate-500">{{ $inv->customer->phone }}</span>@endif
+                                        <span class="text-xs text-slate-500">· @can('sales.view_all')<a href="{{ route('sales.show', $inv) }}">{{ $inv->invoice_no }}</a>@else{{ $inv->invoice_no }}@endcan · {{ $inv->due_date->format('d M') }}</span></td>
+                                    <td class="text-right font-medium">{{ \App\Support\Money::format($inv->due_amount) }}</td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    @endif
+                    @if($reminders['collect_undated'])<p class="border-t border-slate-100 px-5 py-2 text-xs text-slate-500">{{ $reminders['collect_undated'] }} unpaid invoice(s) have no promised date: open the invoice to set one.</p>@endif
+                </div>
+            @endif
+        </div>
+    @endif
+
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         @if($stockAlerts)
             <div class="card card-body sm:col-span-2 xl:col-span-1">

@@ -278,11 +278,14 @@ class CustomerController extends Controller
         $this->authorize('customers.create');
         $d = $request->validate([
             'name' => ['required', 'string', 'max:150'], 'phone' => ['nullable', 'string', 'max:30'], 'company' => ['nullable', 'string', 'max:150'],
-            'allow_duplicate_phone' => ['nullable', 'boolean'],
+            'allow_duplicate_phone' => ['nullable', 'boolean'], 'allow_credit' => ['nullable', 'boolean'],
         ]);
+        // credit terms stay a manager's decision, at the till as on the customer's page
+        $credit = $request->boolean('allow_credit') && $request->user()->can('sales.override_credit_limit');
+        unset($d['allow_credit']);
 
         try {
-            $customer = $this->save->execute($d + ['price_tier' => 'retail', 'allow_credit' => false], $request->user(), null, (bool) ($d['allow_duplicate_phone'] ?? false));
+            $customer = $this->save->execute($d + ['price_tier' => 'retail', 'allow_credit' => $credit], $request->user(), null, (bool) ($d['allow_duplicate_phone'] ?? false));
         } catch (DuplicatePhoneException $e) {
             return response()->json(['error' => 'duplicate_phone', 'message' => $e->getMessage(), 'names' => $e->names], 409);
         } catch (DomainException $e) {

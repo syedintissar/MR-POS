@@ -106,6 +106,7 @@ class SavePurchaseDraft
                 'supplier_id' => $supplier->id,
                 'supplier_invoice_no' => $invoiceNo,
                 'purchase_date' => $data['purchase_date'],
+                'due_date' => $data['due_date'] ?? null,   // when what stays on credit is to be paid (the dashboard reminds)
                 'subtotal' => $totals['subtotal'],
                 'discount_amount' => $invDiscount,
                 'tax_amount' => $invTax,

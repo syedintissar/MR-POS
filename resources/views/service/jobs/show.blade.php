@@ -87,12 +87,12 @@
                             <tbody>
                             @forelse($active as $i)
                                 <tr>
-                                    <td>{{ $i->description }} @if($i->isPart())<span class="badge badge-gray">part</span>@endif</td>
+                                    <td>{{ $i->description }} @if($i->isPart())<span class="badge badge-gray">part</span>@elseif($i->isOutsidePart())<span class="badge badge-amber" title="Bought outside for this job, not from stock">outside part</span>@if($i->outside_source && $can['cost'])<span class="text-xs text-slate-500"> from {{ $i->outside_source }}</span>@endif @endif</td>
                                     <td class="text-right">{{ Decimal::trim((string) $i->quantity) }}</td>
                                     <td class="text-right">{{ Money::format($i->unit_price) }}</td>
                                     <td class="text-right text-slate-500">{{ (float) $i->discount_amount ? Money::format($i->discount_amount) : '' }}</td>
                                     <td class="text-right font-medium">{{ Money::format($i->line_total) }}</td>
-                                    @if($can['cost'])<td class="text-right text-slate-500">{{ $i->isPart() ? Money::format(Decimal::mul((string) $i->quantity, (string) $i->unit_cost, 2)) : '' }}</td>@endif
+                                    @if($can['cost'])<td class="text-right text-slate-500">{{ $i->countsAsPart() ? Money::format(Decimal::mul((string) $i->quantity, (string) $i->unit_cost, 2)) : '' }}</td>@endif
                                     <td class="text-right">
                                         @if(($i->isPart() ? $can['parts'] : $can['charges']))
                                             <form method="POST" action="{{ route('service.jobs.lines.remove', [$job, $i]) }}" class="inline-flex items-center gap-1" @if($i->isPart()) x-data="{ d: 'returned_to_stock' }" @endif
@@ -154,6 +154,26 @@
                         </form>
                     @elseif($can['parts'] && ! $job->isTerminal())
                         <p class="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">Parts can be added once the job is being diagnosed.</p>
+                    @endif
+
+                    @if($can['charges'] && ! $job->isTerminal())
+                        <form method="POST" action="{{ route('service.jobs.charges.add', $job) }}" class="border-t border-slate-100 p-5" x-data="{ cost: '', price: '', qty: 1 }">
+                            @csrf
+                            <input type="hidden" name="outside_part" value="1">
+                            <h3 class="mb-2 text-sm font-semibold text-slate-800">Add a part bought outside <span class="font-normal text-slate-500">(from the market, not from our stock)</span></h3>
+                            <div class="grid gap-3 sm:grid-cols-12">
+                                <div class="sm:col-span-4"><input type="text" name="description" required maxlength="255" placeholder="Part name, e.g. Fuser film HP 1020" class="input" aria-label="Part name"></div>
+                                <div class="sm:col-span-2"><input type="number" name="quantity" step="0.001" min="0.001" x-model="qty" class="input" aria-label="Quantity" placeholder="Qty"></div>
+                                <div class="sm:col-span-2"><input type="number" name="unit_cost" step="0.01" min="0" required x-model="cost" class="input" aria-label="What we paid for one" placeholder="Our cost"></div>
+                                <div class="sm:col-span-2"><input type="number" name="unit_price" step="0.01" min="0" required x-model="price" class="input" aria-label="Price charged to the customer for one" placeholder="Customer price"></div>
+                                <div class="sm:col-span-2"><input type="text" name="outside_source" maxlength="100" class="input" aria-label="Bought from" placeholder="Bought from"></div>
+                            </div>
+                            <div class="mt-3 flex flex-wrap items-center gap-3">
+                                <button class="btn btn-primary btn-sm" data-loading-text="Adding…">Add outside part</button>
+                                <span class="text-sm text-slate-600" x-show="cost !== '' && price !== ''" x-cloak>Profit on this part:
+                                    <strong :class="(price - cost) * qty < 0 ? 'text-red-600' : 'text-emerald-700'" x-text="((price - cost) * qty).toFixed(2)"></strong></span>
+                            </div>
+                        </form>
                     @endif
 
                     @if($can['charges'])

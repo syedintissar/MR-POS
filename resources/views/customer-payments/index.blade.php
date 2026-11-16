@@ -7,7 +7,7 @@
             <div><label class="label">Method</label>
                 <select name="method" class="input w-40"><option value="">All</option>@foreach($methods as $m)<option value="{{ $m->id }}" @selected((int) request('method') === $m->id)>{{ $m->name }}</option>@endforeach</select></div>
             <div><label class="label">Show</label>
-                <select name="source" class="input w-44">@foreach(['collected' => 'Collected from customers', 'till' => 'Taken at the till', 'all' => 'Both'] as $k => $v)<option value="{{ $k }}" @selected(request('source', 'collected') === $k)>{{ $v }}</option>@endforeach</select></div>
+                <select name="source" class="input w-44">@foreach(['all' => 'All payments', 'till' => 'Taken at the till (sales)', 'collected' => 'Collected later from customers'] as $k => $v)<option value="{{ $k }}" @selected(request('source', 'all') === $k)>{{ $v }}</option>@endforeach</select></div>
             <div><label class="label">Status</label>
                 <select name="status" class="input w-32">@foreach(['all' => 'All', 'posted' => 'Recorded', 'voided' => 'Cancelled'] as $k => $v)<option value="{{ $k }}" @selected(request('status', 'all') === $k)>{{ $v }}</option>@endforeach</select></div>
             <div><label class="label">From</label><input type="date" name="from" value="{{ request('from') }}" class="input w-36"></div>
@@ -22,13 +22,14 @@
 
     <div class="card overflow-x-auto">
         <table class="table">
-            <thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Method</th><th>Reference</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>For</th><th>Method</th><th>Reference</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
             <tbody>
             @forelse($payments as $p)
                 <tr class="{{ $p->isVoided() ? 'text-slate-400' : '' }}">
                     <td class="font-mono text-xs font-medium"><a href="{{ route('customer-payments.show', $p) }}">{{ $p->receipt_no }}</a></td>
                     <td class="whitespace-nowrap">{{ $p->payment_date->format('d M Y, H:i') }}</td>
-                    <td>@can('customers.view')<a href="{{ route('customers.show', $p->customer_id) }}">{{ $p->customer->name }}</a>@else{{ $p->customer->name }}@endcan</td>
+                    <td>@if($p->customer->is_walk_in)<span class="text-slate-500">{{ $p->customer->name }}</span>@else @can('customers.view')<a href="{{ route('customers.show', $p->customer_id) }}">{{ $p->customer->name }}</a>@else{{ $p->customer->name }}@endcan @endif</td>
+                    <td class="whitespace-nowrap text-slate-600">@if($p->sale)@canany(['sales.view_all', 'sales.view_own'])<a href="{{ route('sales.show', $p->sale_id) }}">Sale {{ $p->sale->invoice_no }}</a>@else Sale {{ $p->sale->invoice_no }}@endcanany @else Account @endif</td>
                     <td>{{ $p->method->name }}</td>
                     <td class="text-slate-600">{{ $p->reference_no }}</td>
                     <td class="text-right font-medium {{ $p->isVoided() ? 'line-through' : '' }}">{{ \App\Support\Money::format($p->amount) }}</td>
@@ -36,7 +37,7 @@
                     <td class="text-right"><a href="{{ route('customer-payments.show', $p) }}" class="btn btn-secondary btn-sm">Open</a></td>
                 </tr>
             @empty
-                <tr><td colspan="8" class="px-4 py-12 text-center text-slate-500">No payments found.</td></tr>
+                <tr><td colspan="9" class="px-4 py-12 text-center text-slate-500">No payments found.</td></tr>
             @endforelse
             </tbody>
         </table>
