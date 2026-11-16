@@ -11,6 +11,7 @@ use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\Auth\PasswordConfirmController;
 use App\Http\Controllers\CashBookController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\ChequeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
@@ -297,6 +298,13 @@ Route::middleware('auth')->group(function () {
     });
 
     // ---- Phase 11: cash & bank book, day closing -------------------------------------------------------------------
+
+    // The cheque register: cheques received and given, their dates, and whether they cleared or bounced.
+    Route::prefix('cheques')->name('cheques.')->group(function () {
+        Route::get('/', [ChequeController::class, 'index'])->middleware('can:cashbook.view')->name('index');
+        Route::post('/', [ChequeController::class, 'store'])->middleware('can:cashbook.transact')->name('store');
+        Route::post('{cheque}', [ChequeController::class, 'update'])->whereNumber('cheque')->middleware('can:cashbook.transact')->name('update');
+    });
 
     Route::prefix('cash-book')->name('cashbook.')->group(function () {
         Route::middleware('can:cashbook.view')->group(function () {

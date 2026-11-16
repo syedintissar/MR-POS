@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Backup;
+use App\Models\Cheque;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -94,6 +95,11 @@ class DashboardController extends Controller
             ];
         }
 
+        // Cheques still pending whose date has come, or comes within a week.
+        $cheques = $user->can('cashbook.view')
+            ? Cheque::query()->where('status', Cheque::PENDING)->whereDate('cheque_date', '<=', now()->addDays(7)->toDateString())->orderBy('cheque_date')->orderBy('id')->limit(10)->get()
+            : null;
+
         // Service jobs: everybody who may see jobs sees the figures for the jobs they may see (technicians: their own).
         $service = null;
         if ($user->canAny(['service_jobs.view_all', 'service_jobs.view_assigned'])) {
@@ -129,6 +135,7 @@ class DashboardController extends Controller
             'payables' => $payables,
             'receivables' => $receivables,
             'reminders' => $reminders,
+            'cheques' => $cheques,
             'salesToday' => $salesToday,
             'integrity' => $integrity && ($integrity['total'] ?? 0) > 0 ? $integrity : null,
             'warnings' => $warnings,

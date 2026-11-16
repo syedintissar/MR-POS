@@ -208,6 +208,28 @@
             </div>
         </section>
     @endif
+    {{-- cheques: pending ones whose date has come or comes within a week --}}
+    @if($cheques && $cheques->isNotEmpty())
+        <div class="card mb-4" id="cheque-reminders">
+            <div class="card-header flex items-center justify-between"><h2 class="card-title">Cheques to deal with</h2><a href="{{ route('cheques.index') }}" class="text-xs">Cheque register</a></div>
+            <table class="table">
+                <tbody>
+                @foreach($cheques as $c)
+                    @php
+                        $days = (int) now()->startOfDay()->diffInDays($c->cheque_date->copy()->startOfDay(), false);
+                    @endphp
+                    <tr>
+                        <td><span class="badge {{ $days < 0 ? 'badge-red' : ($days === 0 ? 'badge-amber' : 'badge-gray') }}">{{ $days < 0 ? 'dated '.abs($days).' day'.(abs($days) === 1 ? '' : 's').' ago' : ($days === 0 ? 'dated today' : 'in '.$days.' day'.($days === 1 ? '' : 's')) }}</span></td>
+                        <td>{{ $c->direction === 'received' ? 'Received from' : 'Given to' }} <strong>{{ $c->party_name }}</strong>
+                            <span class="text-xs text-slate-500">{{ collect([$c->cheque_no ? 'no. '.$c->cheque_no : null, $c->bank_name, $c->cheque_date->format('d M Y')])->filter()->implode(' · ') }}</span></td>
+                        <td class="text-right font-medium">{{ \App\Support\Money::format($c->amount) }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
+
     {{-- payment reminders: what is due within a week or already late --}}
     @if($reminders && (($reminders['pay'] && $reminders['pay']->isNotEmpty()) || ($reminders['collect'] && $reminders['collect']->isNotEmpty()) || $reminders['pay_undated'] || $reminders['collect_undated']))
         @php

@@ -54,6 +54,7 @@
     ];
     $moneyNav = [
         ['label' => 'Reports', 'route' => 'reports.index', 'match' => 'reports.*', 'can' => 'reports.sales|reports.inventory|reports.purchases|reports.customers|reports.suppliers|reports.service|reports.expenses|reports.profit', 'icon' => 'M9 17v-6m4 6V7m4 10v-3M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z'],
+        ['label' => 'Cheques', 'route' => 'cheques.index', 'match' => 'cheques.*', 'can' => 'cashbook.view', 'icon' => 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'],
         ['label' => 'Cash & bank', 'route' => 'cashbook.index', 'match' => 'cashbook.*', 'can' => 'cashbook.view', 'icon' => 'M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2zm2 8h4'],
         ['label' => 'Sales returns', 'route' => 'sale-returns.index', 'match' => 'sale-returns.*', 'can' => 'sale_returns.view', 'icon' => 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6'],
         ['label' => 'Purchase returns', 'route' => 'purchase-returns.index', 'match' => 'purchase-returns.*', 'can' => 'purchase_returns.view', 'icon' => 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6'],
