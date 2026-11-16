@@ -20,6 +20,8 @@
                 @if($sale->isVoided())<span class="badge badge-red text-sm">Cancelled</span>@elseif($sale->payment_status === 'paid')<span class="badge badge-green text-sm">Paid</span>@else<span class="badge badge-amber text-sm">{{ $sale->payment_status }}</span>@endif
                 @if(! $sale->isVoided() && (float) $sale->due_amount > 0 && ! $sale->customer->is_walk_in)@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $sale->customer_id, 'sale' => $sale->id]) }}" class="btn btn-primary btn-sm">Collect payment</a>@endcan @endif
                 @if($canReturn)<a href="{{ route('sale-returns.create', ['sale' => $sale->id]) }}" class="btn btn-secondary btn-sm">Return items</a>@endif
+                @if($whatsappBill)<a href="{{ $whatsappBill }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" data-no-loading title="Opens WhatsApp with the bill typed in (needs internet at that moment)">Send bill on WhatsApp</a>@endif
+                @if($whatsappReminder)<a href="{{ $whatsappReminder }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" data-no-loading title="Opens WhatsApp with a polite payment reminder">Remind on WhatsApp</a>@endif
                 @if($canReprint)
                     <a href="{{ route('sales.reprint', [$sale, 'thermal']) }}" target="_blank" class="btn btn-secondary btn-sm">Print receipt (copy)</a>
                     <a href="{{ route('sales.reprint', [$sale, 'a4']) }}" target="_blank" class="btn btn-secondary btn-sm">Print A4 invoice (copy)</a>

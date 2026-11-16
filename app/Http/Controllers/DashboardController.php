@@ -88,7 +88,7 @@ class DashboardController extends Controller
                 'pay' => $payables ? Purchase::query()->with('supplier:id,name')->where('status', Purchase::RECEIVED)->where('due_amount', '>', 0)
                     ->whereNotNull('due_date')->whereDate('due_date', '<=', $soon)->orderBy('due_date')->orderBy('id')->limit(10)->get() : null,
                 'pay_undated' => $payables ? Purchase::query()->where('status', Purchase::RECEIVED)->where('due_amount', '>', 0)->whereNull('due_date')->count() : 0,
-                'collect' => $receivables ? Sale::query()->completed()->with('customer:id,name,phone')->where('due_amount', '>', 0)
+                'collect' => $receivables ? Sale::query()->completed()->with('customer:id,name,phone,whatsapp')->where('due_amount', '>', 0)
                     ->whereNotNull('due_date')->whereDate('due_date', '<=', $soon)->orderBy('due_date')->orderBy('id')->limit(10)->get() : null,
                 'collect_undated' => $receivables ? Sale::query()->completed()->where('due_amount', '>', 0)->whereNull('due_date')->count() : 0,
             ];

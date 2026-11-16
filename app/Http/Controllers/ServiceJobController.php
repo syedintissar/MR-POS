@@ -28,6 +28,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use App\Support\Money;
+use App\Support\WhatsApp;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
@@ -386,20 +388,17 @@ class ServiceJobController extends Controller
     /** SRV-15: a pre-filled WhatsApp message that opens only when someone clicks it (needs internet at that moment, never blocks work). */
     private function whatsappLink(ServiceJob $job): ?string
     {
-        $phone = preg_replace('/\D+/', '', (string) ($job->contact_phone ?: $job->customer->phone));
-        if ($phone === '' || strlen($phone) < 9) {
+        if (WhatsApp::number($job->contact_phone, $job->customer->whatsapp, $job->customer->phone) === null) {
             return null;
         }
-        if (str_starts_with($phone, '0')) {
-            $phone = '92'.substr($phone, 1);   // Pakistan numbers: 03xx... -> 923xx...
-        }
+        $toPay = (float) $job->due_amount > 0 ? ' Amount to pay: '.Money::withSymbol($job->due_amount).'.' : '';
         $shop = $this->settings->string('shop.name') ?: config('app.name');
         $text = match ($job->status) {
-            ServiceJob::COMPLETED => "Assalam o Alaikum, your {$job->serviceType->name} job {$job->job_no} is ready for collection. {$shop}",
+            ServiceJob::COMPLETED => "Assalam o Alaikum, your {$job->serviceType->name} job {$job->job_no} is ready for collection.{$toPay} {$shop}",
             ServiceJob::WAITING_APPROVAL => "Assalam o Alaikum, we have inspected your device (job {$job->job_no}). Please call us to approve the estimate. {$shop}",
             default => "Assalam o Alaikum, an update on your job {$job->job_no}: it is {$job->statusLabel()}. {$shop}",
         };
 
-        return 'https://wa.me/'.$phone.'?text='.rawurlencode($text);
+        return WhatsApp::link($text, $job->contact_phone, $job->customer->whatsapp, $job->customer->phone);
     }
 }

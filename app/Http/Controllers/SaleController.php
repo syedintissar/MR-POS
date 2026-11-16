@@ -10,6 +10,9 @@ use App\Models\Sale;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\SettingsService;
+use App\Support\Decimal;
+use App\Support\Money;
+use App\Support\WhatsApp;
 use DomainException;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -92,7 +95,38 @@ class SaleController extends Controller
             'canVoid' => $request->user()->can('sales.void'),
             'canReprint' => $request->user()->can('sales.reprint'),
             'voidWindowHours' => (int) $this->settings->get('sales.void_window_hours'),
+            'whatsappBill' => $sale->isVoided() ? null : WhatsApp::link($this->billText($sale), $sale->customer->whatsapp, $sale->customer->phone),
+            'whatsappReminder' => ! $sale->isVoided() && ! $sale->customer->is_walk_in && (float) $sale->due_amount > 0
+                ? WhatsApp::link($this->reminderText($sale), $sale->customer->whatsapp, $sale->customer->phone) : null,
         ]);
+    }
+
+    /** The invoice as a short message: what was bought, the total, what was paid and what is left. */
+    private function billText(Sale $sale): string
+    {
+        $shop = $this->settings->string('shop.name') ?: config('app.name');
+        $lines = ["*{$shop}*", "Invoice {$sale->invoice_no} · ".$sale->sale_date->format('d M Y'), ''];
+        foreach ($sale->items as $i) {
+            $lines[] = '• '.$i->product_name.' × '.Decimal::trim((string) $i->quantity).' = '.Money::format($i->line_total);
+        }
+        $lines[] = '';
+        $lines[] = 'Total: '.Money::withSymbol($sale->grand_total);
+        $lines[] = 'Paid: '.Money::withSymbol($sale->paid_amount);
+        if ((float) $sale->due_amount > 0) {
+            $lines[] = 'Balance: '.Money::withSymbol($sale->due_amount).($sale->due_date ? ' (by '.$sale->due_date->format('d M Y').')' : '');
+        }
+        $lines[] = '';
+        $lines[] = 'Thank you! '.collect([$this->settings->string('shop.phone'), $this->settings->string('shop.address')])->filter()->implode(' · ');
+
+        return implode("\n", $lines);
+    }
+
+    private function reminderText(Sale $sale): string
+    {
+        $shop = $this->settings->string('shop.name') ?: config('app.name');
+
+        return "Assalam o Alaikum {$sale->customer->name}, a reminder from {$shop}: ".Money::withSymbol($sale->due_amount)." is still to be paid on invoice {$sale->invoice_no} of "
+            .$sale->sale_date->format('d M Y').($sale->due_date ? ', promised by '.$sale->due_date->format('d M Y') : '').'. Thank you. '.$this->settings->string('shop.phone');
     }
 
     /**

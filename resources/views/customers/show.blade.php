@@ -22,6 +22,10 @@
                 @can('pos.access')@if($customer->is_active)<a href="{{ route('pos.index', ['customer' => $customer->id]) }}" class="btn btn-secondary btn-sm">Sell to this customer</a>@endif @endcan
                 @if($money)
                     @can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $customer->id]) }}" class="btn btn-primary btn-sm">Collect a payment</a>@endcan
+                    @if((float) $customer->balance > 0 && \App\Support\WhatsApp::number($customer->whatsapp, $customer->phone))
+                        <a href="{{ \App\Support\WhatsApp::link('Assalam o Alaikum '.$customer->name.', a reminder from '.(app(\App\Services\SettingsService::class)->string('shop.name') ?: config('app.name')).': your balance with us is '.\App\Support\Money::withSymbol($customer->balance).'. Thank you. '.app(\App\Services\SettingsService::class)->string('shop.phone'), $customer->whatsapp, $customer->phone) }}"
+                           target="_blank" rel="noopener" class="btn btn-secondary btn-sm" data-no-loading title="Opens WhatsApp with a polite reminder of what they owe">Remind on WhatsApp</a>
+                    @endif
                     @if($canStatement)
                         <a href="{{ route('customers.statement', array_filter(['customer' => $customer->id, 'from' => $from, 'to' => $to])) }}" target="_blank" class="btn btn-secondary btn-sm">Print statement</a>
                         <a href="{{ route('customers.statement.pdf', array_filter(['customer' => $customer->id, 'from' => $from, 'to' => $to])) }}" class="btn btn-secondary btn-sm">PDF</a>

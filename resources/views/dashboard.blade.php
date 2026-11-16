@@ -259,6 +259,9 @@
                                     <td>{{ $inv->customer->name }}@if($inv->customer->phone) <span class="text-xs text-slate-500">{{ $inv->customer->phone }}</span>@endif
                                         <span class="text-xs text-slate-500">· @can('sales.view_all')<a href="{{ route('sales.show', $inv) }}">{{ $inv->invoice_no }}</a>@else{{ $inv->invoice_no }}@endcan · {{ $inv->due_date->format('d M') }}</span></td>
                                     <td class="text-right font-medium">{{ \App\Support\Money::format($inv->due_amount) }}</td>
+                                    <td class="text-right">@if(\App\Support\WhatsApp::number($inv->customer->whatsapp, $inv->customer->phone))
+                                        <a class="text-xs" target="_blank" rel="noopener" title="Opens WhatsApp with a polite reminder"
+                                           href="{{ \App\Support\WhatsApp::link('Assalam o Alaikum '.$inv->customer->name.', a reminder from '.$shopName.': '.\App\Support\Money::withSymbol($inv->due_amount).' is still to be paid on invoice '.$inv->invoice_no.' (promised by '.$inv->due_date->format('d M Y').'). Thank you.', $inv->customer->whatsapp, $inv->customer->phone) }}">WhatsApp</a>@endif</td>
                                 </tr>
                             @endforeach
                             </tbody>

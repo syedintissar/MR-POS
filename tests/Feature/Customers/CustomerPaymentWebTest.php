@@ -369,6 +369,32 @@ class CustomerPaymentWebTest extends TestCase
         $this->get('/')->assertOk()->assertDontSee('Money to collect from customers');
     }
 
+    public function test_whatsapp_links_carry_the_bill_and_the_reminder_to_the_customers_number(): void
+    {
+        $this->assertSame('923001234567', \App\Support\WhatsApp::number(null, '', '0300-1234567'));
+        $this->assertSame('923001234567', \App\Support\WhatsApp::number('+92 300 1234567'));
+        $this->assertNull(\App\Support\WhatsApp::number('12345', null));
+        $this->assertStringStartsWith('https://wa.me/?text=Hello%20there', \App\Support\WhatsApp::link('Hello there', null));
+
+        $this->customer->forceFill(['phone' => '0300-1234567', 'whatsapp' => '0311 7654321'])->save();
+        $sale = $this->invoice('900');
+        $this->as('Manager');
+
+        $html = $this->get("/sales/{$sale->id}")->assertOk()->assertSee('Send bill on WhatsApp')->assertSee('Remind on WhatsApp')->getContent();
+        $this->assertStringContainsString('https://wa.me/923117654321?text=', $html, 'the WhatsApp number is preferred to the phone number');
+        $this->assertStringContainsString(rawurlencode('Invoice '.$sale->invoice_no), $html);
+        $this->assertStringContainsString(rawurlencode('is still to be paid on invoice '.$sale->invoice_no), $html);
+
+        $this->get("/customers/{$this->customer->id}")->assertOk()->assertSee('Remind on WhatsApp');
+
+        // a paid walk-in sale: the bill can still be sent (WhatsApp asks to whom), there is nothing to remind
+        $walkIn = app(CompleteSale::class)->execute([
+            'idempotency_key' => (string) Str::uuid(), 'lines' => [['product_id' => $this->stocked('50', '10', ['sale_price' => '100'])->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => '100']],
+        ], User::factory()->withRole('Cashier')->create());
+        $this->get("/sales/{$walkIn->id}")->assertOk()->assertSee('Send bill on WhatsApp')->assertDontSee('Remind on WhatsApp')->assertSee('https://wa.me/?text=', false);
+    }
+
     private function collectedAs(string $role): void
     {
         $this->as($role);
