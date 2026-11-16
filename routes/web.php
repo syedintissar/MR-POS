@@ -22,6 +22,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\PurchaseReturnController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
@@ -129,6 +130,18 @@ Route::middleware('auth')->group(function () {
         Route::post('held', [PosController::class, 'hold'])->middleware('can:sales.hold')->name('pos.held.store');
         Route::get('held/{held}', [PosController::class, 'resume'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.show');
         Route::delete('held/{held}', [PosController::class, 'discard'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.destroy');
+    });
+
+    // Quotations: a price offer; it becomes a sale only through the till (/pos?quotation=ID).
+    Route::prefix('quotations')->group(function () {
+        Route::get('/', [QuotationController::class, 'index'])->name('quotations.index');
+        Route::get('create', [QuotationController::class, 'create'])->middleware('can:sales.create')->name('quotations.create');
+        Route::post('/', [QuotationController::class, 'store'])->middleware('can:sales.create')->name('quotations.store');
+        Route::get('{quotation}', [QuotationController::class, 'show'])->whereNumber('quotation')->name('quotations.show');
+        Route::get('{quotation}/edit', [QuotationController::class, 'edit'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.edit');
+        Route::put('{quotation}', [QuotationController::class, 'update'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.update');
+        Route::post('{quotation}/cancel', [QuotationController::class, 'cancel'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.cancel');
+        Route::get('{quotation}/print', [QuotationController::class, 'print'])->whereNumber('quotation')->name('quotations.print');
     });
 
     Route::prefix('sales')->group(function () {

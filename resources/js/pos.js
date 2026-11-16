@@ -57,6 +57,7 @@ export function posApp(cfg, env = {}) {
         submitting: false,
         error: '',
         warnings: [],
+        quotationId: null,       // the quotation this cart came from, if any
         done: null,              // the last completed sale
         printSrc: '',
         restored: false,
@@ -69,12 +70,13 @@ export function posApp(cfg, env = {}) {
         init() {
             this.loadQuick();
             this.restore();
+            if (this.cfg.quotation) this.loadQuotation(this.cfg.quotation);   // "Customer accepted: open in the till" on a quotation
             if (this.cfg.customer) this.useCustomer(this.cfg.customer);   // "Sell to this customer" on a customer's page
             else if (this.customer) this.refreshCustomer();               // a restored cart: the balance may have changed since
 
             // Anything typed into the cart (a quantity box, a price, a note) is remembered, not only the buttons.
             if (this.$watch) {
-                this.$watch('lines', () => this.save(), { deep: true });
+                this.$watch('lines', () => { if (!this.lines.length) this.quotationId = null; this.save(); }, { deep: true });   // an emptied cart is no longer that quotation
                 for (const field of ['tier', 'invMode', 'invValue', 'notes', 'printNotes', 'customer']) this.$watch(field, () => this.save());
             }
         },
@@ -269,7 +271,40 @@ export function posApp(cfg, env = {}) {
             else if (event.key === '-') { event.preventDefault(); this.dec(l); }
         },
 
+        /** An accepted quotation becomes the cart: the quoted quantities, prices and discount, for its customer. */
+        loadQuotation(q) {
+            if (this.lines.length && this.quotationId !== q.id
+                && !globalThis.confirm?.(`Replace the cart on screen with quotation ${q.no}? (Hold the current cart first if you want to keep it.)`)) return;
+
+            this.customer = q.customer ? { ...q.customer } : null;
+            this.tier = q.customer?.tier ?? 'retail';
+            this.lines = q.lines.map((p) => {
+                const list = this.tier === 'wholesale' && p.wholesale_price ? p.wholesale_price : p.price;
+
+                return {
+                    id: p.id, sku: p.sku, name: p.name, unit: p.unit, allows_decimal: p.allows_decimal, is_service: p.is_service, stock: p.stock,
+                    price: p.price, wholesale_price: p.wholesale_price, tax_rate: p.tax_rate, qty: String(p.qty),
+                    priceEdited: Number(p.quoted) !== Number(list) ? String(p.quoted) : null,   // the price that was promised, not today's
+                    disc: '', discMode: 'amt', serial: '', warranty_months: p.warranty_months ?? null,
+                };
+            });
+            this.invMode = 'amt';
+            this.invValue = q.discount || '';
+            this.notes = `Quotation ${q.no}`;
+            this.key = uuid();
+            this.quotationId = q.id;
+            this.warnings = [
+                `Quotation ${q.no} for ${q.for} is loaded with its quoted prices.`,
+                ...(q.left_out ? [`${q.left_out} item(s) on the quotation are not in the product list (or no longer sold) and were left out.`] : []),
+                ...(!q.customer ? ['No customer account is attached: choose the customer to sell on credit.'] : []),
+            ];
+            this.save();
+            // the address keeps no ?quotation=..., so a refresh restores the cart instead of loading the quotation again
+            try { globalThis.history?.replaceState?.(null, '', globalThis.location.pathname); } catch { /* not a browser */ }
+        },
+
         clearCart() {
+            this.quotationId = null;
             this.lines = [];
             this.tier = 'retail';
             this.invMode = 'amt';
@@ -438,7 +473,7 @@ export function posApp(cfg, env = {}) {
             try {
                 if (!storage) return;
                 if (!this.lines.length) { storage.removeItem(STORAGE_KEY); return; }
-                storage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), lines: this.lines, tier: this.tier, invMode: this.invMode, invValue: this.invValue, notes: this.notes, printNotes: this.printNotes, key: this.key, customer: this.customer }));
+                storage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), lines: this.lines, tier: this.tier, invMode: this.invMode, invValue: this.invValue, notes: this.notes, printNotes: this.printNotes, key: this.key, customer: this.customer, quotationId: this.quotationId }));
             } catch { /* private mode or full storage: the cart just is not remembered */ }
         },
 
@@ -449,7 +484,7 @@ export function posApp(cfg, env = {}) {
                 if (!raw) return;
                 const s = JSON.parse(raw);
                 if (!s.lines?.length || Date.now() - (s.at || 0) > 12 * 3600 * 1000) { storage.removeItem(STORAGE_KEY); return; }
-                Object.assign(this, { lines: s.lines, tier: s.tier ?? 'retail', invMode: s.invMode ?? 'amt', invValue: s.invValue ?? '', notes: s.notes ?? '', printNotes: !!s.printNotes, key: s.key || uuid(), customer: s.customer ?? null });
+                Object.assign(this, { lines: s.lines, tier: s.tier ?? 'retail', invMode: s.invMode ?? 'amt', invValue: s.invValue ?? '', notes: s.notes ?? '', printNotes: !!s.printNotes, key: s.key || uuid(), customer: s.customer ?? null, quotationId: s.quotationId ?? null });
                 this.restored = true;
             } catch { /* ignore a damaged saved cart */ }
         },
@@ -570,6 +605,7 @@ export function posApp(cfg, env = {}) {
                 notes: this.notes.trim() || null,
                 print_notes: this.printNotes,
                 expected_total: this.total,
+                quotation_id: this.quotationId,
                 due_date: parse(this.onAccount, 2) > 0n && this.pay.dueDate ? this.pay.dueDate : null,
                 approval_token: this.approvalToken,
             };
