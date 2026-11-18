@@ -31,6 +31,7 @@ use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\ServiceJobController;
 use App\Http\Controllers\ServiceJobWorkController;
 use App\Http\Controllers\ServiceTypeController;
+use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierCreditController;
@@ -238,6 +239,16 @@ Route::middleware('auth')->group(function () {
     });
 
     // ---- Phase 8: expenses, returns, profit and reports ----------------------------------------------------------
+
+    // Staff salaries and advances: every payout is a "Salary" expense; this adds whose salary and of which month.
+    Route::prefix('staff')->name('staff.')->group(function () {
+        Route::get('/', [StaffController::class, 'index'])->middleware('can:expenses.view')->name('index');
+        Route::middleware('can:expenses.create')->group(function () {
+            Route::post('/', [StaffController::class, 'store'])->name('store');
+            Route::put('{employee}', [StaffController::class, 'update'])->whereNumber('employee')->name('update');
+            Route::post('{employee}/pay', [StaffController::class, 'pay'])->whereNumber('employee')->name('pay');
+        });
+    });
 
     Route::prefix('expenses')->name('expenses.')->group(function () {
         Route::get('/', [ExpenseController::class, 'index'])->middleware('can:expenses.view')->name('index');
