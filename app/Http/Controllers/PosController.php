@@ -116,7 +116,7 @@ class PosController extends Controller
             return null;
         }
 
-        $products = Product::query()->with('unit')->active()->whereIn('id', $q->items->pluck('product_id')->filter())->get()->keyBy('id');
+        $products = Product::query()->with(['unit', 'brand'])->active()->whereIn('id', $q->items->pluck('product_id')->filter())->get()->keyBy('id');
         $lines = [];
         $left = 0;
         foreach ($q->items as $item) {
@@ -147,7 +147,7 @@ class PosController extends Controller
         if ($request->filled('ids')) {
             $ids = collect(explode(',', (string) $request->input('ids')))->map(fn ($id) => (int) $id)->filter()->unique()->take(200)->all();
 
-            return response()->json(Product::query()->with('unit')->active()->whereIn('id', $ids)->get()->map(fn (Product $p) => $this->productRow($p))->values());
+            return response()->json(Product::query()->with(['unit', 'brand'])->active()->whereIn('id', $ids)->get()->map(fn (Product $p) => $this->productRow($p))->values());
         }
 
         $term = trim((string) $request->input('q'));
@@ -155,7 +155,7 @@ class PosController extends Controller
             return response()->json([]);
         }
 
-        $rows = Product::query()->with('unit')->active()->search($term)
+        $rows = Product::query()->with(['unit', 'brand'])->active()->search($term)
             ->when($request->filled('category'), function ($q) use ($request) {
                 $root = $request->integer('category');
                 $ids = Category::query()->where('id', $root)->orWhere('parent_id', $root)->pluck('id');
@@ -176,9 +176,9 @@ class PosController extends Controller
             ->where('s.status', Sale::COMPLETED)->where('s.sale_date', '>=', now()->subDays(30))
             ->groupBy('i.product_id')->orderByRaw('SUM(i.quantity) DESC')->limit(12)->pluck('i.product_id')->all();
 
-        $products = Product::query()->with('unit')->active()->whereIn('id', $ids)->get()->sortBy(fn ($p) => array_search($p->id, $ids, true))->values();
+        $products = Product::query()->with(['unit', 'brand'])->active()->whereIn('id', $ids)->get()->sortBy(fn ($p) => array_search($p->id, $ids, true))->values();
         if ($products->count() < 12) {
-            $more = Product::query()->with('unit')->active()->whereNotIn('id', $ids)->where(fn ($q) => $q->where('type', Product::TYPE_SERVICE)->orWhere('current_stock', '>', 0))
+            $more = Product::query()->with(['unit', 'brand'])->active()->whereNotIn('id', $ids)->where(fn ($q) => $q->where('type', Product::TYPE_SERVICE)->orWhere('current_stock', '>', 0))
                 ->orderByDesc('updated_at')->limit(12 - $products->count())->get();
             $products = $products->concat($more);
         }
@@ -311,7 +311,7 @@ class PosController extends Controller
         abort_unless($held->user_id === $request->user()->id, 403);
 
         $ids = collect($held->cart['lines'] ?? [])->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $products = Product::query()->with('unit')->withTrashed()->whereIn('id', $ids)->get()->map(fn (Product $p) => $this->productRow($p) + ['available' => $p->is_active && ! $p->trashed()]);
+        $products = Product::query()->with(['unit', 'brand'])->withTrashed()->whereIn('id', $ids)->get()->map(fn (Product $p) => $this->productRow($p) + ['available' => $p->is_active && ! $p->trashed()]);
 
         $customer = $held->customer_id ? Customer::query()->where('is_walk_in', false)->find($held->customer_id) : null;
 
@@ -343,6 +343,10 @@ class PosController extends Controller
             'price' => (string) $p->sale_price, 'wholesale_price' => $p->wholesale_price !== null ? (string) $p->wholesale_price : null,
             'tax_rate' => $taxOn ? Decimal::round($p->tax_rate !== null ? (string) $p->tax_rate : (string) $this->settings->get('tax.default_rate'), 2) : '0',
             'warranty_months' => $p->warranty_months,
+            // for the quick-pick and search tiles: the picture (only for people who may see products), brand and model
+            'image' => $p->image_path && auth()->user()?->can('products.view') ? route('products.image', $p).'?v='.$p->updated_at?->timestamp : null,
+            'brand' => $p->brand?->name,
+            'model' => $p->model,
         ];
     }
 }

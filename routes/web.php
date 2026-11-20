@@ -108,6 +108,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:suppliers.create')->group(function () {
         Route::get('suppliers/create', [SupplierController::class, 'create'])->name('suppliers.create');
         Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
+        Route::post('suppliers/quick', [SupplierController::class, 'quickStore'])->name('suppliers.quick');   // "+ New supplier" on the product form
     });
     Route::middleware('can:suppliers.edit')->group(function () {
         Route::get('suppliers/{supplier}/edit', [SupplierController::class, 'edit'])->whereNumber('supplier')->name('suppliers.edit');

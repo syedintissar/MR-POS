@@ -14,6 +14,7 @@ use App\Services\DocumentNumberService;
 use App\Services\Purchasing\SupplierAccountService;
 use App\Support\Decimal;
 use DomainException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -126,6 +127,27 @@ class SupplierController extends Controller
         });
 
         return redirect()->route('suppliers.edit', $supplier)->with('success', "Supplier {$supplier->code} added.");
+    }
+
+    /** "+ New supplier" from the product form: name, phone and company only; the rest can be filled in on the supplier's page later. */
+    public function quickStore(Request $request): JsonResponse
+    {
+        $this->authorize('suppliers.create');
+        $d = $request->validate([
+            'name' => ['required', 'string', 'max:150'], 'phone' => ['nullable', 'string', 'max:30'], 'company' => ['nullable', 'string', 'max:150'],
+        ], ['name.required' => 'Enter the supplier\'s name.']);
+        $data = ['name' => trim($d['name']), 'phone' => trim((string) ($d['phone'] ?? '')) ?: null, 'company' => trim((string) ($d['company'] ?? '')) ?: null, 'is_active' => true];
+
+        $supplier = DB::transaction(function () use ($data, $request) {
+            $supplier = Supplier::query()->create($data + [
+                'code' => $this->numbers->next('supplier'), 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id,
+            ]);
+            $this->audit->log('supplier_created', 'suppliers', "Supplier {$supplier->code} · {$supplier->name} created (from the product form)", $supplier, new: $data);
+
+            return $supplier;
+        });
+
+        return response()->json(['id' => $supplier->id, 'name' => $supplier->name, 'company' => $supplier->company, 'code' => $supplier->code], 201);
     }
 
     public function edit(Supplier $supplier): View

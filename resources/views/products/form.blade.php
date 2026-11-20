@@ -5,11 +5,51 @@
     $canOpen = ! $editing && $user->can('inventory.adjust');
     $canCost = $user->can('products.view_cost');
     $unitsJson = $units->mapWithKeys(fn ($u) => [$u->id => (bool) $u->allows_decimal]);
+    $canAddSupplier = $canBuy && $user->can('suppliers.create');
 @endphp
 <x-layouts.app :title="$editing ? 'Edit product' : 'New product'">
+    <script>
+        window.productForm = function (init) {
+            const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+            return {
+                ...init,
+                get stock() { return this.type === 'stock'; },
+                get total() { return Math.round(num(this.qty) * num(this.cost) * 100) / 100; },
+                get paidNow() { return this.payMode === 'credit' ? 0 : (this.payMode === 'full' ? this.total : num(this.payAmount)); },
+                get onCredit() { return Math.max(0, Math.round((this.total - this.paidNow) * 100) / 100); },
+                get needsRef() { const m = this.methods.find((x) => String(x.id) === String(this.methodId)); return !!(m && m.requires_reference); },
+                money(v) { return (v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+                async addSupplier() {
+                    const f = this.newSup;
+                    if (f.name.trim() === '') { f.error = 'Enter the supplier\'s name.'; return; }
+                    f.busy = true; f.error = '';
+                    try {
+                        const r = await fetch(this.quickUrl, {
+                            method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+                            body: JSON.stringify({ name: f.name.trim(), phone: f.phone.trim() || null, company: f.company.trim() || null }),
+                        });
+                        const d = await r.json().catch(() => ({}));
+                        if (!r.ok) { f.error = d.errors ? Object.values(d.errors).flat()[0] : (d.message || 'The supplier could not be saved.'); return; }
+                        this.suppliers.push({ id: d.id, label: d.name + (d.company ? ' (' + d.company + ')' : '') });
+                        this.supplierId = String(d.id);
+                        this.newSup = { open: false, name: '', phone: '', company: '', busy: false, error: '' };
+                    } catch { f.error = 'The server could not be reached.'; } finally { f.busy = false; }
+                },
+            };
+        };
+    </script>
     <form method="POST" action="{{ $editing ? route('products.update', $product) : route('products.store') }}" enctype="multipart/form-data"
           class="mx-auto max-w-5xl space-y-5"
-          x-data="{ type: '{{ old('type', $product->type) }}', unit: '{{ old('unit_id', $product->unit_id) }}', decimals: @js($unitsJson), get stock() { return this.type === 'stock' } }">
+          x-data="productForm(@js([
+              'type' => old('type', $product->type), 'unit' => (string) old('unit_id', $product->unit_id), 'decimals' => $unitsJson,
+              'buy' => (bool) old('buy_from_supplier', false), 'qty' => (string) old('opening_stock', ''), 'cost' => (string) old('opening_cost', ''),
+              'supplierId' => (string) old('purchase_supplier_id', ''), 'payMode' => old('pay_mode', 'credit'), 'payAmount' => (string) old('pay_amount', ''),
+              'methodId' => (string) old('pay_method_id', $payMethods->first()?->id ?? ''), 'methods' => $payMethods->map(fn ($m) => ['id' => $m->id, 'requires_reference' => (bool) $m->requires_reference])->values(),
+              'suppliers' => $suppliers->map(fn ($s) => ['id' => $s->id, 'label' => $s->name.($s->company ? ' ('.$s->company.')' : '')])->values(),
+              'quickUrl' => $canAddSupplier ? route('suppliers.quick') : null,
+              'newSup' => ['open' => false, 'name' => '', 'phone' => '', 'company' => '', 'busy' => false, 'error' => ''],
+          ]))">
         @csrf
         @if($editing) @method('PUT') @endif
 
@@ -73,11 +113,86 @@
                 <div class="card" x-show="stock" x-cloak>
                     <div class="card-header"><h2 class="card-title">Stock</h2></div>
                     <div class="card-body grid gap-4 sm:grid-cols-3">
-                        @if($canOpen)
-                            <x-form.input name="opening_stock" label="Stock you have now" type="number" step="any" min="0"
-                                          help="Counted by hand. Leave empty if you have none yet." x-bind:step="decimals[unit] ? '0.001' : '1'" />
-                            @if($canCost)<x-form.input name="opening_cost" label="Cost of each (Rs.)" type="number" step="0.01" min="0" help="What one unit cost you." />@endif
-                        @elseif($editing)
+                        @if($canBuy)
+                            {{-- the stock came from a supplier: a purchase bill is made and received with the product --}}
+                            <label class="flex items-start gap-2.5 rounded-md border border-brand-200 bg-brand-50 p-3 text-sm sm:col-span-3">
+                                <input type="hidden" name="buy_from_supplier" value="0">
+                                <input type="checkbox" name="buy_from_supplier" value="1" x-model="buy" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600">
+                                <span><strong>Bought from a supplier?</strong> <span class="text-slate-600">(optional) Tick to record the stock below as a purchase from a supplier: it goes on their account, paid now by cash / bank / Easypaisa, partly, or on credit.</span></span>
+                            </label>
+                        @endif
+                        @if($canOpen || $canBuy)
+                            <div @if(! $canOpen) x-show="buy" x-cloak @endif>
+                                <x-form.input name="opening_stock" label="Stock you have now" type="number" step="any" min="0" x-model="qty"
+                                              help="Leave empty if you have none yet." x-bind:step="decimals[unit] ? '0.001' : '1'" />
+                                <p class="help -mt-1" x-show="buy" x-cloak>The quantity bought from the supplier.</p>
+                            </div>
+                            @if($canCost)
+                                <div @if(! $canOpen) x-show="buy" x-cloak @endif>
+                                    <x-form.input name="opening_cost" label="Cost of each (Rs.)" type="number" step="0.01" min="0" x-model="cost" help="What one unit cost you." />
+                                </div>
+                            @endif
+                            @error('buy_from_supplier')<p class="error-text sm:col-span-3">{{ $message }}</p>@enderror
+                        @endif
+                        @if($canBuy)
+                            <div class="space-y-4 rounded-md border border-slate-200 p-4 sm:col-span-3" x-show="buy" x-cloak id="buy-from-supplier">
+                                <div class="grid gap-4 sm:grid-cols-3">
+                                    <div class="sm:col-span-2">
+                                        <label class="label" for="purchase_supplier_id">Supplier <span class="text-red-500">*</span></label>
+                                        <div class="flex gap-2">
+                                            <select id="purchase_supplier_id" name="purchase_supplier_id" x-model="supplierId" class="input {{ $errors->has('purchase_supplier_id') ? 'input-error' : '' }}">
+                                                <option value="">— choose —</option>
+                                                <template x-for="s in suppliers" :key="s.id"><option :value="String(s.id)" x-text="s.label" :selected="String(s.id) === supplierId"></option></template>
+                                            </select>
+                                            @if($canAddSupplier)<button type="button" class="btn btn-secondary whitespace-nowrap" data-no-loading @click="newSup.open = !newSup.open">+ New supplier</button>@endif
+                                        </div>
+                                        @error('purchase_supplier_id')<p class="error-text">{{ $message }}</p>@enderror
+                                    </div>
+                                    <x-form.input name="supplier_invoice_no" label="Supplier's bill no. (optional)" />
+                                </div>
+
+                                @if($canAddSupplier)
+                                    <div class="grid gap-3 rounded-md bg-slate-50 p-3 sm:grid-cols-4" x-show="newSup.open" x-cloak id="quick-supplier">
+                                        <input type="text" x-model="newSup.name" maxlength="150" placeholder="Supplier name" class="input" aria-label="Supplier name" @keydown.enter.prevent="addSupplier()">
+                                        <input type="text" x-model="newSup.phone" maxlength="30" placeholder="Phone" class="input" aria-label="Phone" @keydown.enter.prevent="addSupplier()">
+                                        <input type="text" x-model="newSup.company" maxlength="150" placeholder="Company (optional)" class="input" aria-label="Company" @keydown.enter.prevent="addSupplier()">
+                                        <button type="button" class="btn btn-primary" data-no-loading :disabled="newSup.busy" @click="addSupplier()" x-text="newSup.busy ? 'Saving…' : 'Add and select'"></button>
+                                        <p class="text-sm text-red-600 sm:col-span-4" x-show="newSup.error" x-text="newSup.error"></p>
+                                    </div>
+                                @endif
+
+                                <div>
+                                    <div class="label">Payment</div>
+                                    <div class="flex flex-wrap gap-4 text-sm">
+                                        <label class="flex items-center gap-2"><input type="radio" name="pay_mode" value="credit" x-model="payMode"> On credit (pay later)</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="pay_mode" value="full" x-model="payMode"> Paid in full now</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="pay_mode" value="part" x-model="payMode"> Paid part now</label>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="pay_amount" :value="payMode === 'credit' ? '' : (payMode === 'full' ? total.toFixed(2) : payAmount)">
+                                <div class="grid gap-4 sm:grid-cols-4" x-show="payMode !== 'credit'" x-cloak>
+                                    <div x-show="payMode === 'part'"><label class="label" for="pay_amount_part">Paid now (Rs.)</label>
+                                        <input id="pay_amount_part" type="number" step="0.01" min="0" x-model="payAmount" class="input {{ $errors->has('pay_amount') ? 'input-error' : '' }}">
+                                        @error('pay_amount')<p class="error-text">{{ $message }}</p>@enderror</div>
+                                    <div><label class="label" for="pay_method_id">Paid by</label>
+                                        <select id="pay_method_id" name="pay_method_id" x-model="methodId" class="input">
+                                            @foreach($payMethods as $m)<option value="{{ $m->id }}">{{ $m->name }}</option>@endforeach
+                                        </select>
+                                        @error('pay_method_id')<p class="error-text">{{ $message }}</p>@enderror</div>
+                                    <div x-show="needsRef"><x-form.input name="pay_reference" label="Reference (transaction / cheque no.)" /></div>
+                                </div>
+                                <div class="grid gap-4 sm:grid-cols-4" x-show="onCredit > 0" x-cloak>
+                                    <x-form.input name="due_date" label="Pay the rest by (optional)" type="date" :min="now()->toDateString()" help="The dashboard reminds you." />
+                                </div>
+                                <div class="flex flex-wrap gap-x-6 gap-y-1 rounded-md bg-slate-50 px-3 py-2 text-sm">
+                                    <span>Bill total <strong x-text="money(total)"></strong></span>
+                                    <span>Paid now <strong x-text="money(paidNow)"></strong></span>
+                                    <span>On credit with the supplier <strong class="text-amber-700" x-text="money(onCredit)"></strong></span>
+                                    <span class="text-red-600" x-show="paidNow > total + 0.001" x-cloak>Paid now is more than the bill.</span>
+                                </div>
+                            </div>
+                        @endif
+                        @if($editing)
                             <div class="sm:col-span-2">
                                 <div class="label">Stock now</div>
                                 <div class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">{{ \App\Support\Decimal::trim($product->current_stock) }} {{ $product->unit?->short_name }}</div>

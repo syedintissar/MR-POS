@@ -19,7 +19,7 @@
         * { box-sizing: border-box; }
         @page { size: {{ $width }}mm auto; margin: {{ $mt }}mm {{ $mr }}mm {{ $mb }}mm {{ $ml }}mm; }
         html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-        body { width: {{ $width - $ml - $mr }}mm; font-family: Consolas, 'Lucida Console', 'Courier New', monospace; font-size: {{ $font }}pt; line-height: 1.25; }
+        body { width: {{ $width - $ml - $mr }}mm; font-family: {!! \App\Support\PrintFont::thermal() !!}; {!! \App\Support\PrintFont::weight() !!} font-size: {{ $font }}pt; line-height: 1.25; }
         .copy { page-break-after: always; break-after: page; padding-bottom: 2mm; }
         .copy:last-child { page-break-after: auto; break-after: auto; }
         .c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; }
