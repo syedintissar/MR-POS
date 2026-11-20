@@ -12,7 +12,7 @@
     <title>Purchase {{ $purchase->label() }}</title>
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #111; background: #e5e7eb; }
+        body { margin: 0; font-family: {!! \App\Support\PrintFont::a4() !!}; {!! \App\Support\PrintFont::weight() !!} font-size: 12px; color: #111; background: #e5e7eb; }
         .bar { position: sticky; top: 0; display: flex; gap: .75rem; align-items: center; padding: .6rem 1rem; background: #fff; border-bottom: 1px solid #d1d5db; font-size: 14px; }
         .bar button { padding: .4rem .9rem; border: 0; border-radius: 6px; background: #1d4ed8; color: #fff; font-size: 14px; cursor: pointer; }
         .sheet { width: 210mm; min-height: 297mm; margin: 12px auto; padding: 14mm; background: #fff; }

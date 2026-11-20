@@ -62,8 +62,15 @@
                         <template x-for="p in ((query.trim() || category) ? results : quick)" :key="p.id">
                             <button type="button" data-no-loading @click="add(p); query = ''; results = []; category = null; $nextTick(() => document.getElementById('pos-search').focus())"
                                     class="rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-brand-500 hover:shadow">
-                                <div class="line-clamp-2 text-sm font-medium text-slate-900" x-text="p.name"></div>
-                                <div class="mt-0.5 font-mono text-[11px] text-slate-500" x-text="p.sku"></div>
+                                <div class="flex gap-2.5">
+                                    <template x-if="p.image"><img :src="p.image" alt="" loading="lazy" class="h-14 w-14 shrink-0 rounded border border-slate-200 bg-white object-contain"></template>
+                                    <template x-if="!p.image"><div class="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-slate-200 text-[10px] text-slate-300">no pic</div></template>
+                                    <div class="min-w-0">
+                                        <div class="line-clamp-2 text-sm font-medium text-slate-900" x-text="p.name"></div>
+                                        <div class="truncate text-[11px] text-slate-600" x-show="p.brand || p.model" x-text="[p.brand, p.model].filter(Boolean).join(' · ')"></div>
+                                        <div class="font-mono text-[11px] text-slate-500" x-text="p.sku"></div>
+                                    </div>
+                                </div>
                                 <div class="mt-1.5 flex items-end justify-between">
                                     <span class="text-base font-semibold text-slate-900" x-text="money(p.price)"></span>
                                     <span class="text-[11px]" :class="p.is_service ? 'text-slate-400' : (parseFloat(p.stock) <= 0 ? 'font-semibold text-red-600' : 'text-slate-500')"

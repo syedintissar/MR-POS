@@ -134,6 +134,33 @@
                     @endif
 
                     @if($group === 'printing')
+                        {{-- live preview of the two fonts: follows the drop-downs above before anything is saved --}}
+                        <div class="sm:col-span-2" id="font-preview"
+                             x-data="{ fonts: @js(collect(\App\Support\PrintFont::FONTS)->map(fn ($f) => $f[1])), t: '', a: '', bold: false,
+                                       read() { this.t = document.getElementById('printing_thermal_font')?.value; this.a = document.getElementById('printing_a4_font')?.value;
+                                                this.bold = !!document.querySelector('input[type=checkbox][name=printing_bold_text]')?.checked; } }"
+                             x-init="read()" @change.window="read()">
+                            <label class="label">Preview</label>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="rounded-md border border-dashed border-slate-300 bg-white p-3 text-[12px] leading-snug text-black" :style="'font-family:' + fonts[t] + ';' + (bold ? 'font-weight:700' : '')">
+                                    <div class="text-center text-[15px] font-bold">{{ app(\App\Services\SettingsService::class)->string('shop.name') ?: 'MR TECH' }}</div>
+                                    <div class="text-center">Thermal receipt · INV-000123</div>
+                                    <div class="my-1 border-t border-dashed border-black"></div>
+                                    <div class="flex justify-between"><span>HP 85A Toner × 2</span><span>9,000.00</span></div>
+                                    <div class="flex justify-between"><span>Refill 12A × 1</span><span>1,200.00</span></div>
+                                    <div class="my-1 border-t border-dashed border-black"></div>
+                                    <div class="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>10,200.00</span></div>
+                                </div>
+                                <div class="rounded-md border border-dashed border-slate-300 bg-white p-3 text-[12px] text-black" :style="'font-family:' + fonts[a] + ';' + (bold ? 'font-weight:700' : '')">
+                                    <div class="text-[17px] font-bold">{{ app(\App\Services\SettingsService::class)->string('shop.name') ?: 'MR TECH' }}</div>
+                                    <div class="mb-2">A4 invoice / quotation · QTN-000045</div>
+                                    <div class="flex justify-between border-b border-slate-300 py-0.5"><span>HP LaserJet 1020 × 1</span><span>32,000.00</span></div>
+                                    <div class="flex justify-between border-b border-slate-300 py-0.5"><span>Installation at site</span><span>1,500.00</span></div>
+                                    <div class="mt-1 flex justify-between text-[14px] font-bold"><span>Total</span><span>Rs. 33,500.00</span></div>
+                                </div>
+                            </div>
+                            <p class="help">Change the drop-downs to see each font; press Save to use it. Downloaded PDFs always use their own built-in font.</p>
+                        </div>
                         <div class="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:col-span-2">
                             Receipts are printed by the browser to the printer set as the Windows default on each counter PC, so any 80 mm thermal printer
                             with a Windows driver works. The settings above control the layout (paper width, margins, font size, copies and automatic printing).

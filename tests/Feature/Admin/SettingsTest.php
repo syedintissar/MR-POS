@@ -112,7 +112,7 @@ class SettingsTest extends TestCase
         $valid = [
             'printing_default_format' => 'thermal', 'printing_printer_name' => 'Counter 1', 'printing_printer_model' => 'Generic 58mm',
             'printing_paper_width_mm' => '58', 'printing_margin_top_mm' => '1', 'printing_margin_right_mm' => '1', 'printing_margin_bottom_mm' => '3',
-            'printing_margin_left_mm' => '1', 'printing_font_size_pt' => '8', 'printing_copies' => 2,
+            'printing_margin_left_mm' => '1', 'printing_font_size_pt' => '8', 'printing_thermal_font' => 'tahoma', 'printing_a4_font' => 'calibri', 'printing_copies' => 2,
             'printing_auto_print_sale' => 0, 'printing_auto_print_job_slip' => 1, 'printing_auto_print_payment' => 0, 'printing_open_cash_drawer' => 1,
         ];
 
@@ -124,6 +124,8 @@ class SettingsTest extends TestCase
         $this->assertFalse($s->bool('printing.auto_print_sale'));
         $this->assertTrue($s->bool('printing.open_cash_drawer'));
         $this->assertSame('Generic 58mm', $s->get('printing.printer_model'));
+        $this->assertSame('tahoma', $s->get('printing.thermal_font'));
+        $this->assertSame('calibri', $s->get('printing.a4_font'));
 
         $this->actingAs($admin)->put('/admin/settings/printing', array_merge($valid, ['printing_paper_width_mm' => '70', 'printing_copies' => 50]))
             ->assertSessionHasErrors(['printing_paper_width_mm', 'printing_copies']);

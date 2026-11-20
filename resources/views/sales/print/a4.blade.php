@@ -16,7 +16,7 @@
     <style>
         * { box-sizing: border-box; }
         @page { size: A4; margin: 12mm; }
-        body { margin: 0; font-family: {!! $pdf ? "'DejaVu Sans', sans-serif" : "'Segoe UI', DejaVu Sans, Arial, sans-serif" !!}; font-size: {{ $pdf ? '9' : '10' }}pt; color: #111; background: {{ $pdf ? '#fff' : '#e5e7eb' }}; }
+        body { margin: 0; font-family: {!! $pdf ? "'DejaVu Sans', sans-serif" : \App\Support\PrintFont::a4() !!}; {!! $pdf ? '' : \App\Support\PrintFont::weight() !!} font-size: {{ $pdf ? '9' : '10' }}pt; color: #111; background: {{ $pdf ? '#fff' : '#e5e7eb' }}; }
         .sheet { @if($pdf) position: relative; @else width: 186mm; min-height: 270mm; margin: 10px auto; padding: 8mm; background: #fff; position: relative; @endif }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 4px 6px; vertical-align: top; text-align: left; }

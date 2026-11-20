@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Actions\Products\SaveProduct;
+use App\Actions\Purchasing\ReceivePurchase;
+use App\Actions\Purchasing\SavePurchaseDraft;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\Unit;
+use App\Models\User;
 use App\Services\Inventory\ProductImageService;
 use App\Services\SettingsService;
 use App\Support\Decimal;
@@ -18,6 +23,7 @@ use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -29,6 +35,8 @@ class ProductController extends Controller
         private readonly SaveProduct $products,
         private readonly ProductImageService $images,
         private readonly SettingsService $settings,
+        private readonly SavePurchaseDraft $drafts,
+        private readonly ReceivePurchase $receive,
     ) {}
 
     public function index(Request $request): View
@@ -78,15 +86,26 @@ class ProductController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $this->authorize('products.create');
-        [$data, $opening] = $this->validated($request, null);
+        [$data, $opening, $buy] = $this->validated($request, null);
+        $user = $request->user();
 
         $image = $request->file('image') ? $this->images->store($request->file('image')) : null;
         if ($image) {
             $data['image_path'] = $image;
         }
 
+        $purchase = null;
         try {
-            $product = $this->products->create($data, $opening, $request->user());
+            // One step: the product, and (when it was bought from a supplier) the purchase bill, received with its payment.
+            // If any part is refused, nothing is saved.
+            $product = DB::transaction(function () use ($data, $opening, $buy, $user, &$purchase) {
+                $product = $this->products->create($data, $opening, $user);
+                if ($buy !== null) {
+                    $purchase = $this->buyFromSupplier($product, $buy, $user);
+                }
+
+                return $product;
+            });
         } catch (DomainException|\InvalidArgumentException $e) {
             $this->images->delete($image);
 
@@ -96,7 +115,37 @@ class ProductController extends Controller
             throw $e;
         }
 
+        if ($purchase !== null) {
+            $paid = Decimal::trim((string) $purchase->paid_amount);
+            $due = Decimal::trim((string) $purchase->due_amount);
+
+            return redirect()->route('products.show', $product)->with('success',
+                "Product {$product->sku} created and bought from {$purchase->supplier->name} as {$purchase->purchase_no}: paid {$paid}, on credit {$due}.");
+        }
+
         return redirect()->route('products.show', $product)->with('success', "Product {$product->sku} created.");
+    }
+
+    /**
+     * The stock of a new product came from a supplier: it goes in through a purchase bill (stock, average cost and the supplier's account
+     * are all updated by receiving it), paid now in full or in part, or left on credit to be paid by a date.
+     *
+     * @param  array{supplier_id: int, quantity: string, unit_cost: string, invoice_no: string|null, payment: array<string, mixed>|null, due_date: string|null}  $buy
+     */
+    private function buyFromSupplier(Product $product, array $buy, User $user): Purchase
+    {
+        $draft = $this->drafts->execute([
+            'supplier_id' => $buy['supplier_id'], 'supplier_invoice_no' => $buy['invoice_no'], 'purchase_date' => now()->toDateString(),
+            'due_date' => $buy['due_date'], 'notes' => "Bought with the new product {$product->sku} · {$product->name}",
+            'lines' => [['product_id' => $product->id, 'quantity' => $buy['quantity'], 'unit_cost' => $buy['unit_cost']]],
+        ], $user);
+        $purchase = $this->receive->execute($draft, $user, $buy['payment']);
+
+        if (Decimal::isZero((string) $purchase->due_amount) && $purchase->due_date !== null) {
+            $purchase->forceFill(['due_date' => null])->save();   // paid in full: nothing to be reminded of
+        }
+
+        return $purchase->load('supplier');
     }
 
     public function show(Product $product): View
@@ -223,11 +272,66 @@ class ProductController extends Controller
             'units' => Unit::query()->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'company']),
             'hasHistory' => false,
+            'payMethods' => PaymentMethod::query()->forSuppliers()->get(['id', 'name', 'requires_reference']),
+            'canBuy' => ! $product->exists && $this->canBuy(auth()->user()),
+        ];
+    }
+
+    /** Recording the purchase of a new product's stock needs the same rights as receiving a purchase, and seeing costs. */
+    private function canBuy(?User $user): bool
+    {
+        return $user !== null && $user->can('purchases.create') && $user->can('purchases.receive') && $user->can('products.view_cost');
+    }
+
+    /**
+     * What a new product's "bought from a supplier" part says, checked.
+     *
+     * @return array{supplier_id: int, quantity: string, unit_cost: string, invoice_no: string|null, payment: array<string, mixed>|null, due_date: string|null}
+     */
+    private function supplierPurchase(Request $request, Unit $unit): array
+    {
+        if (! $this->canBuy($request->user())) {
+            throw ValidationException::withMessages(['buy_from_supplier' => 'You are not allowed to record purchases from suppliers.']);
+        }
+
+        $b = $request->validate([
+            'purchase_supplier_id' => ['required', Rule::exists('suppliers', 'id')->where('is_active', true)->whereNull('deleted_at')],
+            'opening_stock' => ['required', 'numeric', 'gt:0', 'max:999999999', 'decimal:0,3'],
+            'opening_cost' => ['required', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,4'],
+            'supplier_invoice_no' => ['nullable', 'string', 'max:50'],
+            'pay_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,2'],
+            'pay_method_id' => ['nullable', Rule::exists('payment_methods', 'id')->where('is_active', true)->whereNot('kind', 'customer_credit')],
+            'pay_reference' => ['nullable', 'string', 'max:100'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:today'],
+        ], [
+            'purchase_supplier_id.required' => 'Choose the supplier it was bought from, or add a new one.',
+            'purchase_supplier_id.exists' => 'That supplier is not active.',
+            'opening_stock.required' => 'Enter how many were bought.',
+            'opening_stock.gt' => 'Enter how many were bought.',
+            'opening_cost.required' => 'Enter what one cost (0 if it was free).',
+            'due_date.after_or_equal' => 'The date to pay by cannot be in the past.',
+            'decimal' => 'Too many decimal places.',
+        ]);
+
+        $quantity = Decimal::round((string) $b['opening_stock'], 3);
+        if (! $unit->allows_decimal && ! Decimal::isWhole($quantity)) {
+            throw ValidationException::withMessages(['opening_stock' => "{$unit->name} is counted in whole numbers."]);
+        }
+        $paid = isset($b['pay_amount']) && $b['pay_amount'] !== '' ? Decimal::round((string) $b['pay_amount'], 2) : '0.00';
+        if (Decimal::isPositive($paid) && empty($b['pay_method_id'])) {
+            throw ValidationException::withMessages(['pay_method_id' => 'Choose how it was paid (cash, bank, Easypaisa …).']);
+        }
+
+        return [
+            'supplier_id' => (int) $b['purchase_supplier_id'], 'quantity' => $quantity, 'unit_cost' => Decimal::round((string) $b['opening_cost'], 4),
+            'invoice_no' => trim((string) ($b['supplier_invoice_no'] ?? '')) ?: null,
+            'payment' => Decimal::isPositive($paid) ? ['payment_method_id' => (int) $b['pay_method_id'], 'amount' => $paid, 'reference_no' => trim((string) ($b['pay_reference'] ?? '')) ?: null] : null,
+            'due_date' => $b['due_date'] ?? null,
         ];
     }
 
     /**
-     * @return array{0: array<string, mixed>, 1: array{quantity: string, unit_cost: string|null}|null}
+     * @return array{0: array<string, mixed>, 1: array{quantity: string, unit_cost: string|null}|null, 2: array<string, mixed>|null}
      */
     private function validated(Request $request, ?Product $editing): array
     {
@@ -290,8 +394,9 @@ class ProductController extends Controller
         }
 
         $unit = Unit::query()->findOrFail($d['unit_id']);
+        $buy = $editing === null && $d['type'] === 'stock' && $request->boolean('buy_from_supplier') ? $this->supplierPurchase($request, $unit) : null;
         $opening = null;
-        if ($editing === null && ($d['type'] === 'stock') && isset($d['opening_stock']) && Decimal::isPositive($d['opening_stock'])) {
+        if ($buy === null && $editing === null && ($d['type'] === 'stock') && isset($d['opening_stock']) && Decimal::isPositive($d['opening_stock'])) {
             if (! $user->can('inventory.adjust')) {
                 throw ValidationException::withMessages(['opening_stock' => 'You are not allowed to enter stock quantities.']);
             }
@@ -322,6 +427,11 @@ class ProductController extends Controller
             $data['rack_location'] = null;
         }
 
-        return [$data, $opening];
+        // bought from a supplier: that supplier becomes the usual one when none was chosen
+        if ($buy !== null && empty($data['default_supplier_id'])) {
+            $data['default_supplier_id'] = $buy['supplier_id'];
+        }
+
+        return [$data, $opening, $buy];
     }
 }
