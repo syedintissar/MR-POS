@@ -41,6 +41,9 @@ use Illuminate\Support\Facades\Route;
 // Public: shop logo (login page and printed receipts).
 Route::get('/branding/logo', [SettingsController::class, 'logo'])->name('branding.logo');
 
+// Public: the footer credit. Pages never carry an outside address (the shop works offline); WhatsApp opens only when it is clicked.
+Route::redirect('/developer', 'https://wa.me/923190855540', 302)->name('developer.whatsapp');   // 0319-0855540
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::post('/login', [LoginController::class, 'store'])->name('login.store');

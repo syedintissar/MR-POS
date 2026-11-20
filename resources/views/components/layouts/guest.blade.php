@@ -34,6 +34,7 @@
         {{ $slot }}
     </div>
     <p class="mt-6 text-xs text-slate-400">MR-POS v{{ config('mrpos.version') }}</p>
+    <p class="mt-1 text-xs"><x-credit /></p>
 </div>
 </body>
 </html>
