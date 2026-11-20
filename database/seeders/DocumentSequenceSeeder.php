@@ -22,6 +22,7 @@ class DocumentSequenceSeeder extends Seeder
         'money_transaction' => ['Cash & bank entry', 'CBK-'],
         'day_closing' => ['Day closing', 'DCL-'],
         'bank_reconciliation' => ['Bank statement matching', 'REC-'],
+        'quotation' => ['Quotation', 'QTN-'],
         'customer' => ['Customer code', 'CUS-'],
         'supplier' => ['Supplier code', 'SUP-'],
         'product' => ['Product SKU (when left blank)', 'P-'],

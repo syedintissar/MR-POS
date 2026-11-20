@@ -13,6 +13,17 @@ class CustomerPayment extends Model
 {
     protected $guarded = ['*'];
 
+    protected static function booted(): void
+    {
+        // the cheque register follows payments made by cheque
+        static::created(fn (self $payment) => Cheque::recordFor($payment));
+        static::updated(function (self $payment) {
+            if ($payment->wasChanged('status') && $payment->status === 'voided') {
+                Cheque::cancelFor($payment);
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return ['payment_date' => 'datetime', 'voided_at' => 'datetime', 'amount' => 'decimal:2'];

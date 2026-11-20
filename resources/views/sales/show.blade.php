@@ -20,6 +20,8 @@
                 @if($sale->isVoided())<span class="badge badge-red text-sm">Cancelled</span>@elseif($sale->payment_status === 'paid')<span class="badge badge-green text-sm">Paid</span>@else<span class="badge badge-amber text-sm">{{ $sale->payment_status }}</span>@endif
                 @if(! $sale->isVoided() && (float) $sale->due_amount > 0 && ! $sale->customer->is_walk_in)@can('customer_payments.create')<a href="{{ route('customer-payments.create', ['customer' => $sale->customer_id, 'sale' => $sale->id]) }}" class="btn btn-primary btn-sm">Collect payment</a>@endcan @endif
                 @if($canReturn)<a href="{{ route('sale-returns.create', ['sale' => $sale->id]) }}" class="btn btn-secondary btn-sm">Return items</a>@endif
+                @if($whatsappBill)<a href="{{ $whatsappBill }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" data-no-loading title="Opens WhatsApp with the bill typed in (needs internet at that moment)">Send bill on WhatsApp</a>@endif
+                @if($whatsappReminder)<a href="{{ $whatsappReminder }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" data-no-loading title="Opens WhatsApp with a polite payment reminder">Remind on WhatsApp</a>@endif
                 @if($canReprint)
                     <a href="{{ route('sales.reprint', [$sale, 'thermal']) }}" target="_blank" class="btn btn-secondary btn-sm">Print receipt (copy)</a>
                     <a href="{{ route('sales.reprint', [$sale, 'a4']) }}" target="_blank" class="btn btn-secondary btn-sm">Print A4 invoice (copy)</a>
@@ -72,6 +74,18 @@
                 @if(! $sale->isVoided())
                     <div class="flex justify-between text-emerald-700"><span>Paid</span><span>{{ Money::format($sale->paid_amount) }}</span></div>
                     @if((float) $sale->change_amount)<div class="flex justify-between text-slate-600"><span>Cash handed over {{ Money::format($sale->amount_tendered) }}, change given</span><span>{{ Money::format($sale->change_amount) }}</span></div>@endif
+                    @if((float) $sale->due_amount > 0 && ! $sale->customer->is_walk_in)
+                        @can('customer_payments.create')
+                            <form method="POST" action="{{ route('sales.due-date', $sale) }}" class="my-1 flex flex-wrap items-end gap-2">
+                                @csrf
+                                <div><label class="label" for="due_date">Promised to pay by @if($sale->due_date && $sale->due_date->isPast() && ! $sale->due_date->isToday())<span class="badge badge-red">overdue</span>@endif</label>
+                                    <input id="due_date" type="date" name="due_date" value="{{ optional($sale->due_date)->toDateString() }}" class="input h-9 w-44"></div>
+                                <button class="btn btn-secondary btn-sm" data-loading-text="Saving…">Save date</button>
+                            </form>
+                        @elseif($sale->due_date)
+                            <div class="flex justify-between text-slate-600"><span>Promised to pay by</span><span>{{ $sale->due_date->format('d M Y') }}</span></div>
+                        @endcan
+                    @endif
                     @if((float) $sale->due_amount)<div class="flex justify-between font-semibold text-amber-700"><span>Still to pay</span><span>{{ Money::format($sale->due_amount) }}</span></div>@endif
                 @endif
                 @if($showCost)

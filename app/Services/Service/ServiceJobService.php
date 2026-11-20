@@ -60,7 +60,7 @@ class ServiceJobService
         $cost = '0.00';
         $lines = [];
         foreach ($items as $i) {
-            if ($i->isPart()) {
+            if ($i->countsAsPart()) {
                 $parts = Decimal::add($parts, (string) $i->line_total, 2);
                 $cost = Decimal::add($cost, Decimal::mul((string) $i->quantity, (string) $i->unit_cost, 2), 2);
             } else {
@@ -108,14 +108,16 @@ class ServiceJobService
     }
 
     /** A charge line (labour, refill ...): billed, no stock. The caller recomputes the job afterwards. */
-    public function addCharge(ServiceJob $job, string $description, string $quantity, string $unitPrice, string $discount, ?string $taxRate, ?User $by): ServiceJobItem
+    public function addCharge(ServiceJob $job, string $description, string $quantity, string $unitPrice, string $discount, ?string $taxRate, ?User $by, ?string $outsideCost = null, ?string $outsideSource = null): ServiceJobItem
     {
         $this->assertInTransaction();
 
         $item = new ServiceJobItem;
         $item->forceFill([
             'service_job_id' => $job->id, 'line_type' => ServiceJobItem::CHARGE, 'product_id' => null, 'description' => mb_substr($description, 0, 255),
-            'quantity' => $quantity, 'unit_price' => $unitPrice, 'unit_cost' => '0', 'discount_amount' => $discount, 'tax_rate' => $taxRate,
+            'quantity' => $quantity, 'unit_price' => $unitPrice, 'unit_cost' => $outsideCost ?? '0', 'discount_amount' => $discount, 'tax_rate' => $taxRate,
+            // a part bought outside for the job: what the shop paid for it is its cost
+            'outside_part' => $outsideCost !== null, 'outside_source' => $outsideCost !== null && $outsideSource !== null && $outsideSource !== '' ? mb_substr($outsideSource, 0, 100) : null,
             'line_total' => Decimal::sub(Decimal::mul($quantity, $unitPrice, 2), $discount, 2), 'status' => ServiceJobItem::ACTIVE,
             'added_by' => $by?->id, 'added_at' => now(),
         ])->save();

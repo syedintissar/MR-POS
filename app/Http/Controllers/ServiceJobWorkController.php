@@ -51,9 +51,13 @@ class ServiceJobWorkController extends Controller
         $d = $request->validate([
             'description' => ['required', 'string', 'max:255'], 'quantity' => ['nullable', 'numeric', 'gt:0', 'max:999999', 'decimal:0,3'],
             'unit_price' => ['required', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,2'], 'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,2'],
-        ]);
+            // a part bought outside (not from stock): what it cost the shop, and optionally where it was bought
+            'outside_part' => ['nullable', 'boolean'], 'unit_cost' => ['nullable', 'required_if:outside_part,1', 'numeric', 'min:0', 'max:9999999999', 'decimal:0,4'],
+            'outside_source' => ['nullable', 'string', 'max:100'],
+        ], ['unit_cost.required_if' => 'Enter what the shop paid for the part.']);
+        $d['outside_part'] = $request->boolean('outside_part');
 
-        return $this->run(fn () => $this->addCharge->execute($job, $d, $request->user()), 'Charge added.');
+        return $this->run(fn () => $this->addCharge->execute($job, $d, $request->user()), $d['outside_part'] ? 'Outside part added.' : 'Charge added.');
     }
 
     public function removeLine(Request $request, ServiceJob $job, ServiceJobItem $item): RedirectResponse

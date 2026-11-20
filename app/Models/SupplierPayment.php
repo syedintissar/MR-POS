@@ -13,6 +13,17 @@ class SupplierPayment extends Model
 {
     protected $guarded = ['id', 'status', 'payment_no', 'voided_at', 'voided_by', 'void_reason'];
 
+    protected static function booted(): void
+    {
+        // the cheque register follows payments made by cheque
+        static::created(fn (self $payment) => Cheque::recordFor($payment));
+        static::updated(function (self $payment) {
+            if ($payment->wasChanged('status') && $payment->status === 'voided') {
+                Cheque::cancelFor($payment);
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return ['payment_date' => 'date', 'amount' => 'decimal:2', 'voided_at' => 'datetime'];

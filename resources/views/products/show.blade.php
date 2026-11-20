@@ -97,6 +97,7 @@
                         @foreach([
                             'Category' => ($product->category?->parent ? $product->category->parent->name.' › ' : '').$product->category?->name,
                             'Brand' => $product->brand?->name, 'Model' => $product->model, 'Unit' => $product->unit?->name,
+                            'Bought by the' => $product->pack() ? $product->pack()['name'].' (1 '.$product->pack()['unit'].' = '.$product->pack()['factor'].' '.$product->unit?->short_name.')' : null,
                             'Shelf' => $product->rack_location, 'Usual supplier' => $product->defaultSupplier?->name,
                             'Tax rate' => $product->tax_rate !== null ? $product->tax_rate.'%' : 'shop default',
                             'Warranty' => $product->warranty_months ? $product->warranty_months.' months'.($product->warranty_terms ? ' · '.$product->warranty_terms : '') : null,

@@ -11,6 +11,7 @@ use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\Auth\PasswordConfirmController;
 use App\Http\Controllers\CashBookController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\ChequeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\DashboardController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\PurchaseReturnController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
@@ -29,6 +31,7 @@ use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\ServiceJobController;
 use App\Http\Controllers\ServiceJobWorkController;
 use App\Http\Controllers\ServiceTypeController;
+use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierCreditController;
@@ -131,12 +134,25 @@ Route::middleware('auth')->group(function () {
         Route::delete('held/{held}', [PosController::class, 'discard'])->whereNumber('held')->middleware('can:sales.hold')->name('pos.held.destroy');
     });
 
+    // Quotations: a price offer; it becomes a sale only through the till (/pos?quotation=ID).
+    Route::prefix('quotations')->group(function () {
+        Route::get('/', [QuotationController::class, 'index'])->name('quotations.index');
+        Route::get('create', [QuotationController::class, 'create'])->middleware('can:sales.create')->name('quotations.create');
+        Route::post('/', [QuotationController::class, 'store'])->middleware('can:sales.create')->name('quotations.store');
+        Route::get('{quotation}', [QuotationController::class, 'show'])->whereNumber('quotation')->name('quotations.show');
+        Route::get('{quotation}/edit', [QuotationController::class, 'edit'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.edit');
+        Route::put('{quotation}', [QuotationController::class, 'update'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.update');
+        Route::post('{quotation}/cancel', [QuotationController::class, 'cancel'])->whereNumber('quotation')->middleware('can:sales.create')->name('quotations.cancel');
+        Route::get('{quotation}/print', [QuotationController::class, 'print'])->whereNumber('quotation')->name('quotations.print');
+    });
+
     Route::prefix('sales')->group(function () {
         Route::get('/', [SaleController::class, 'index'])->name('sales.index');
         Route::get('{sale}', [SaleController::class, 'show'])->whereNumber('sale')->name('sales.show');
         Route::get('{sale}/print/{format}', [SaleController::class, 'print'])->whereNumber('sale')->middleware('signed')->name('sales.print');
         Route::get('{sale}/reprint/{format}', [SaleController::class, 'reprint'])->whereNumber('sale')->name('sales.reprint');
         Route::get('{sale}/pdf', [SaleController::class, 'pdf'])->whereNumber('sale')->name('sales.pdf');
+        Route::post('{sale}/due-date', [SaleController::class, 'dueDate'])->whereNumber('sale')->middleware('can:customer_payments.create')->name('sales.due-date');
         Route::post('{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.void', 'password.confirm'])->name('sales.void');
     });
 
@@ -224,6 +240,16 @@ Route::middleware('auth')->group(function () {
 
     // ---- Phase 8: expenses, returns, profit and reports ----------------------------------------------------------
 
+    // Staff salaries and advances: every payout is a "Salary" expense; this adds whose salary and of which month.
+    Route::prefix('staff')->name('staff.')->group(function () {
+        Route::get('/', [StaffController::class, 'index'])->middleware('can:expenses.view')->name('index');
+        Route::middleware('can:expenses.create')->group(function () {
+            Route::post('/', [StaffController::class, 'store'])->name('store');
+            Route::put('{employee}', [StaffController::class, 'update'])->whereNumber('employee')->name('update');
+            Route::post('{employee}/pay', [StaffController::class, 'pay'])->whereNumber('employee')->name('pay');
+        });
+    });
+
     Route::prefix('expenses')->name('expenses.')->group(function () {
         Route::get('/', [ExpenseController::class, 'index'])->middleware('can:expenses.view')->name('index');
         Route::middleware('can:expenses.create')->group(function () {
@@ -283,6 +309,13 @@ Route::middleware('auth')->group(function () {
     });
 
     // ---- Phase 11: cash & bank book, day closing -------------------------------------------------------------------
+
+    // The cheque register: cheques received and given, their dates, and whether they cleared or bounced.
+    Route::prefix('cheques')->name('cheques.')->group(function () {
+        Route::get('/', [ChequeController::class, 'index'])->middleware('can:cashbook.view')->name('index');
+        Route::post('/', [ChequeController::class, 'store'])->middleware('can:cashbook.transact')->name('store');
+        Route::post('{cheque}', [ChequeController::class, 'update'])->whereNumber('cheque')->middleware('can:cashbook.transact')->name('update');
+    });
 
     Route::prefix('cash-book')->name('cashbook.')->group(function () {
         Route::middleware('can:cashbook.view')->group(function () {
@@ -347,6 +380,7 @@ Route::middleware('auth')->group(function () {
         });
         Route::get('{purchase}', [PurchaseController::class, 'show'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.show');
         Route::get('{purchase}/print', [PurchaseController::class, 'print'])->whereNumber('purchase')->middleware('can:purchases.view')->name('purchases.print');
+        Route::post('{purchase}/due-date', [PurchaseController::class, 'dueDate'])->whereNumber('purchase')->middleware('can:purchases.create')->name('purchases.due-date');
         Route::post('{purchase}/receive', [PurchaseController::class, 'receive'])->whereNumber('purchase')->middleware('can:purchases.receive')->name('purchases.receive');
         Route::post('{purchase}/void', [PurchaseController::class, 'void'])->whereNumber('purchase')->middleware(['can:purchases.void', 'password.confirm'])->name('purchases.void');
     });

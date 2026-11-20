@@ -272,6 +272,8 @@ class CompleteSale
             'user_id' => $by->id,
             'approved_by' => $approver?->id,
             'sale_date' => $now,
+            // when a named customer promised to pay what is left on account (the dashboard reminds); nothing for a paid sale
+            'due_date' => $customer->is_walk_in ? null : ($data['due_date'] ?? null),
             'price_tier' => $tier,
             'status' => Sale::COMPLETED,
             'tax_inclusive' => $inclusive,

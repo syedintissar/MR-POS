@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 class SaveProduct
 {
     private const AUDITED_FIELDS = [
-        'type', 'name', 'sku', 'barcode', 'category_id', 'brand_id', 'unit_id', 'model', 'description', 'tax_rate',
+        'type', 'name', 'sku', 'barcode', 'category_id', 'brand_id', 'unit_id', 'purchase_unit_id', 'purchase_unit_factor', 'model', 'description', 'tax_rate',
         'min_stock_level', 'rack_location', 'default_supplier_id', 'warranty_months', 'warranty_terms', 'is_active',
     ];
 

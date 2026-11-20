@@ -266,7 +266,8 @@ class CashBookDecisionsTest extends TestCase
 
         $this->assertSame('REC-000001', $r->reconciliation_no);
         $this->assertSame('0.00', (string) $r->opening_balance);
-        $this->assertSame([$b['opening'], $b['in'], $b['expense']], array_column($this->statements()->lines($r), 'key'));   // today's line is after the statement
+        // today's line is after the statement; lines of one day entered in the same second have no fixed order, so the sets are compared
+        $this->assertEqualsCanonicalizing([$b['opening'], $b['in'], $b['expense']], array_column($this->statements()->lines($r), 'key'));
 
         // saved ticks are kept; a statement that does not add up is not closed and nothing of that step is kept
         $r = $this->statements()->save($r, [$b['opening']], false, $this->manager);

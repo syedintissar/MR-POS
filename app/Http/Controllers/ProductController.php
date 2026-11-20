@@ -102,7 +102,7 @@ class ProductController extends Controller
     public function show(Product $product): View
     {
         $this->authorize('products.view');
-        $product->load(['category.parent', 'brand', 'unit', 'defaultSupplier']);
+        $product->load(['category.parent', 'brand', 'unit', 'purchaseUnit', 'defaultSupplier']);
 
         $movements = auth()->user()->can('inventory.view')
             ? StockMovement::query()->with('user:id,name')->where('product_id', $product->id)->orderByDesc('id')->limit(15)->get()
@@ -203,9 +203,22 @@ class ProductController extends Controller
     /** @return array<string, mixed> */
     private function formData(Product $product): array
     {
+        $categories = Category::query()->whereNull('parent_id')->with('children')->orderBy('sort_order')->orderBy('name')->get();
+
+        // Built by hand, keyed by the category's own id. (flatMap() renumbers number keys, which offered each category under
+        // its position in the list instead: a product then landed in the wrong category, or a new category was refused.)
+        $categoryOptions = ['' => '— choose —'];
+        foreach ($categories as $c) {
+            $categoryOptions[$c->id] = $c->name;
+            foreach ($c->children as $child) {
+                $categoryOptions[$child->id] = $c->name.' › '.$child->name;
+            }
+        }
+
         return [
             'product' => $product,
-            'categories' => Category::query()->whereNull('parent_id')->with('children')->orderBy('sort_order')->orderBy('name')->get(),
+            'categoryOptions' => $categoryOptions,
+            'categories' => $categories,
             'brands' => Brand::query()->where('is_active', true)->orderBy('name')->get(),
             'units' => Unit::query()->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'company']),
@@ -239,6 +252,9 @@ class ProductController extends Controller
             'category_id' => ['required', Rule::exists('categories', 'id')],
             'brand_id' => ['nullable', Rule::exists('brands', 'id')],
             'unit_id' => ['required', Rule::exists('units', 'id')],
+            // bought in a bigger unit than it is kept in (a kg packet, used by the gram): which unit, and how many small units it holds
+            'purchase_unit_id' => ['nullable', Rule::exists('units', 'id'), 'different:unit_id'],
+            'purchase_unit_factor' => ['nullable', 'required_with:purchase_unit_id', 'numeric', 'gt:0', 'max:999999', 'decimal:0,3'],
             'model' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:2000'],
             'sale_price' => ['required', 'numeric', 'min:0', 'max:9999999999'],
@@ -259,6 +275,8 @@ class ProductController extends Controller
             'sku.regex' => 'The SKU may only use letters, digits and ordinary symbols (no accented letters), so it can be printed as a barcode.',
             'barcode.regex' => 'The barcode may only use letters, digits and ordinary symbols, with no spaces or accented letters.',
             'barcode.unique' => 'Another product already uses this barcode.',
+            'purchase_unit_id.different' => 'The unit it is bought in must be different from the unit it is kept in.',
+            'purchase_unit_factor.required_with' => 'Say how many of the stock unit one bought unit holds (for example 1000 grams in a kilogram).',
         ]);
 
         // A scanner types the code and presses Enter: a barcode equal to another product's SKU (or the reverse) would be ambiguous.
@@ -294,6 +312,10 @@ class ProductController extends Controller
         $data['is_active'] = $request->boolean('is_active', true);
         $data['sku'] = $sku;
         $data['barcode'] = $barcode;
+
+        $packUnit = $d['type'] === 'stock' && ! empty($d['purchase_unit_id']) ? (int) $d['purchase_unit_id'] : null;
+        $data['purchase_unit_id'] = $packUnit;
+        $data['purchase_unit_factor'] = $packUnit ? Decimal::round((string) $d['purchase_unit_factor'], 3) : null;
 
         if ($d['type'] === 'service') {
             $data['min_stock_level'] = null;

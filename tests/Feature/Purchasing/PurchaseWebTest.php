@@ -5,6 +5,7 @@ namespace Tests\Feature\Purchasing;
 use App\Actions\Purchasing\PostSupplierPayment;
 use App\Actions\Purchasing\ReceivePurchase;
 use App\Actions\Purchasing\SavePurchaseDraft;
+use App\Models\Category;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -12,6 +13,7 @@ use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierLedgerEntry;
 use App\Models\SupplierPayment;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -60,6 +62,74 @@ class PurchaseWebTest extends TestCase
     private function received(string $qty = '10', string $cost = '100'): Purchase
     {
         return app(ReceivePurchase::class)->execute($this->draft(null, $qty, $cost), User::factory()->create());
+    }
+
+    // ---------------------------------------------------------------- bought by the kilogram, kept by the gram
+
+    public function test_a_product_bought_by_the_kilogram_goes_into_stock_in_grams_at_the_cost_per_gram(): void
+    {
+        $g = Unit::query()->where('short_name', 'g')->firstOrFail();
+        $kg = Unit::query()->where('short_name', 'kg')->firstOrFail();
+        $this->as('Manager');
+
+        // set up through the product form
+        $this->post('/products', [
+            'type' => 'stock', 'name' => 'Toner powder HP', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id,
+            'purchase_unit_id' => $kg->id, 'purchase_unit_factor' => '1000', 'sale_price' => '4', 'is_active' => 1,
+        ])->assertSessionHasNoErrors();
+        $powder = Product::query()->where('name', 'Toner powder HP')->firstOrFail();
+        $this->assertSame('1000.000', (string) $powder->purchase_unit_factor);
+        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $g->id, 'purchase_unit_factor' => '5', 'sale_price' => '1'])
+            ->assertSessionHasErrors('purchase_unit_id');
+        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $kg->id, 'sale_price' => '1'])
+            ->assertSessionHasErrors('purchase_unit_factor');
+        $this->get("/products/{$powder->id}")->assertOk()->assertSee('Bought by the')->assertSee('1 kg = 1000 g');
+        $this->getJson('/purchases/lookup?q=Toner+powder')->assertOk()->assertJsonPath('0.pack.unit', 'kg')->assertJsonPath('0.pack.factor', '1000');
+
+        // 2.5 kilograms at 2,400 a kilogram, all on credit, to be paid in ten days
+        $due = now()->addDays(10)->toDateString();
+        $this->post('/purchases', $this->payload($powder, [
+            'action' => 'receive', 'due_date' => $due,
+            'lines' => [['product_id' => $powder->id, 'quantity' => '2.5', 'unit_cost' => '2400', 'in_pack' => '1']],
+        ]))->assertSessionHasNoErrors()->assertSessionMissing('error');
+
+        $bill = Purchase::query()->latest('id')->firstOrFail();
+        $line = $bill->items()->sole();
+        $this->assertSame('2500.000', (string) $line->quantity);
+        $this->assertSame('2.4000', (string) $line->unit_cost);
+        $this->assertSame('6000.00', (string) $bill->grand_total);
+        $this->assertSame('6000.00', (string) $bill->due_amount);
+        $this->assertSame($due, $bill->due_date->toDateString());
+        $powder->refresh();
+        $this->assertSame('2500.000', (string) $powder->current_stock);
+        $this->assertSame('2.4000', (string) $powder->average_cost);
+        $this->get("/purchases/{$bill->id}")->assertOk()->assertSee('= 2.5 kg');
+
+        // typed in grams it is taken as it is
+        $this->post('/purchases', $this->payload($powder, ['action' => 'receive', 'lines' => [['product_id' => $powder->id, 'quantity' => '500', 'unit_cost' => '2.4', 'in_pack' => '0']]]))->assertSessionHasNoErrors();
+        $this->assertSame('3000.000', (string) $powder->fresh()->current_stock);
+    }
+
+    public function test_bills_and_invoices_falling_due_are_listed_on_the_dashboard_and_the_date_can_be_moved(): void
+    {
+        $late = $this->received('1', '700');
+        $late->forceFill(['due_date' => now()->subDays(3)->toDateString()])->save();
+        $soon = $this->received('1', '800');
+        $soon->forceFill(['due_date' => now()->addDays(2)->toDateString()])->save();
+        $far = $this->received('1', '900');
+        $far->forceFill(['due_date' => now()->addDays(40)->toDateString()])->save();
+        $undated = $this->received('1', '950');
+        $this->as('Admin');
+
+        $this->get('/')->assertOk()->assertSee('Payments to make to suppliers')
+            ->assertSee($late->purchase_no)->assertSee('overdue 3 days')->assertSee($soon->purchase_no)->assertSee('in 2 days')
+            ->assertDontSee($far->purchase_no)->assertDontSee($undated->purchase_no)->assertSee('1 unpaid bill(s) have no date to pay by');
+
+        $this->post("/purchases/{$far->id}/due-date", ['due_date' => now()->toDateString()])->assertSessionHas('success');
+        $this->get('/')->assertOk()->assertSee($far->purchase_no)->assertSee('due today');
+        $this->post("/purchases/{$far->id}/due-date", ['due_date' => ''])->assertSessionHas('success');
+        $this->assertNull($far->fresh()->due_date);
+        $this->get("/purchases/{$late->id}")->assertOk()->assertSee('Pay by')->assertSee('overdue');
     }
 
     // ---------------------------------------------------------------- pages render

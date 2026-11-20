@@ -13,6 +13,7 @@ use App\Models\Customer;
 use App\Models\HeldSale;
 use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Models\Sale;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\Inventory\InventoryService;
@@ -79,12 +80,14 @@ class PosController extends Controller
                     'complete' => $user->can('sales.create'),
                     'credit' => $user->can('sales.credit'),
                     'overrideLimit' => $user->can('sales.override_credit_limit'),
+                    'setCredit' => $user->can('sales.override_credit_limit') && $user->can('customers.create'),
                     'customers' => $user->can('customers.view'),
                     'addCustomer' => $user->can('customers.create'),
                     'seeBalance' => $money,
                 ],
                 'creditMethodId' => PaymentMethod::query()->where('kind', 'customer_credit')->value('id'),
                 'customer' => $preselected,
+                'quotation' => $this->quotationCart($request),   // "Customer accepted: open in the till" on a quotation
                 'methods' => PaymentMethod::query()->forTill()->get(['id', 'name', 'kind', 'requires_reference'])
                     ->map(fn ($m) => ['id' => $m->id, 'name' => $m->name, 'kind' => $m->kind, 'ref' => (bool) $m->requires_reference])->values(),
                 'urls' => [
@@ -94,6 +97,44 @@ class PosController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * An open quotation as a cart for the till: today's products with the quoted quantities and prices. Items that were only typed
+     * on the quotation, and products that are no longer sold, are left out and counted so the cashier is told.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function quotationCart(Request $request): ?array
+    {
+        if (! $request->filled('quotation')) {
+            return null;
+        }
+        $user = $request->user();
+        $q = Quotation::query()->with('items')->find($request->integer('quotation'));
+        if (! $q || ! $q->isOpen() || ! $user->can('sales.create') || ! ($user->can('sales.view_all') || (int) $q->created_by === $user->id)) {
+            return null;
+        }
+
+        $products = Product::query()->with('unit')->active()->whereIn('id', $q->items->pluck('product_id')->filter())->get()->keyBy('id');
+        $lines = [];
+        $left = 0;
+        foreach ($q->items as $item) {
+            $p = $item->product_id ? $products->get($item->product_id) : null;
+            if (! $p) {
+                $left++;
+
+                continue;
+            }
+            $lines[] = $this->productRow($p) + ['qty' => Decimal::trim((string) $item->quantity), 'quoted' => (string) $item->unit_price];
+        }
+        $customer = $q->customer_id ? Customer::query()->where('is_walk_in', false)->where('is_active', true)->find($q->customer_id) : null;
+
+        return [
+            'id' => $q->id, 'no' => $q->quotation_no, 'lines' => $lines, 'left_out' => $left, 'for' => $q->customer_name,
+            'discount' => Decimal::isPositive((string) $q->discount_amount) ? Decimal::trim((string) $q->discount_amount) : '',
+            'customer' => $customer ? $this->customers->summary($customer, $user->can('customer_payments.view')) : null,
+        ];
     }
 
     /** Search by name, SKU, barcode or model; or browse a category. Never returns cost or the lowest allowed price. */
@@ -170,6 +211,8 @@ class PosController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             'print_notes' => ['nullable', 'boolean'],
             'expected_total' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:today'],
+            'quotation_id' => ['nullable', 'integer'],
             'approval_token' => ['nullable', 'string', 'max:80'],
         ], ['decimal' => 'Too many decimal places.']);
 
@@ -185,6 +228,12 @@ class PosController extends Controller
             return response()->json(['error' => 'forbidden', 'message' => $e->getMessage()], 403);
         } catch (DomainException|InvalidArgumentException $e) {
             return response()->json(['error' => 'invalid', 'message' => $e->getMessage()], 422);
+        }
+
+        // the sale came from a quotation: the quotation is now accepted and points at its invoice
+        if (! empty($d['quotation_id'])) {
+            Quotation::query()->whereKey((int) $d['quotation_id'])->where('status', Quotation::OPEN)
+                ->update(['status' => Quotation::ACCEPTED, 'sale_id' => $sale->id, 'accepted_at' => now(), 'updated_at' => now()]);
         }
 
         $signed = fn (string $format) => URL::temporarySignedRoute('sales.print', now()->addMinutes(10), ['sale' => $sale->id, 'format' => $format, 'autoprint' => 1]);

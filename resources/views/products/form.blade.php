@@ -31,12 +31,21 @@
                         <x-form.input name="sku" label="SKU" :value="$product->sku" help="Leave empty to get the next number automatically." />
                         <x-form.input name="barcode" label="Barcode" :value="$product->barcode" help="Scan it into this box. Leave empty if there is none." autocomplete="off" />
                         <x-form.select name="category_id" label="Category" required :value="$product->category_id"
-                            :options="['' => '— choose —'] + $categories->flatMap(fn ($c) => [$c->id => $c->name] + $c->children->mapWithKeys(fn ($ch) => [$ch->id => $c->name.' › '.$ch->name])->all())->all()" />
+                            :options="$categoryOptions" />
                         <x-form.select name="brand_id" label="Brand" :value="$product->brand_id" :options="['' => '—'] + $brands->pluck('name', 'id')->all()" />
                         <x-form.input name="model" label="Model" :value="$product->model" />
                         <x-form.select name="unit_id" label="Unit" required :value="$product->unit_id" :options="$units->mapWithKeys(fn ($u) => [$u->id => $u->name.' ('.$u->short_name.')'])->all()" x-model="unit"
                                        :disabled="$editing && $hasHistory" :help="$editing && $hasHistory ? 'The unit cannot be changed once the product has stock history.' : null" />
                         @if($editing && $hasHistory)<input type="hidden" name="unit_id" value="{{ $product->unit_id }}">@endif
+                        <div class="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2" x-show="stock" x-cloak>
+                            <div class="mb-2 text-sm font-medium text-slate-800">Bought in a bigger unit? <span class="font-normal text-slate-500">(optional: e.g. toner powder kept in grams but bought by the kilogram)</span></div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <x-form.select name="purchase_unit_id" label="Bought by the" :value="$product->purchase_unit_id"
+                                               :options="['' => '— same as the unit above —'] + $units->mapWithKeys(fn ($u) => [$u->id => $u->name.' ('.$u->short_name.')'])->all()" />
+                                <x-form.input name="purchase_unit_factor" label="One of those holds how many of the unit above?" type="number" step="0.001" min="0"
+                                              :value="$product->purchase_unit_factor !== null ? \App\Support\Decimal::trim((string) $product->purchase_unit_factor) : ''" placeholder="1000" help="Kilogram to gram is 1000. Purchases can then be typed in kilograms; the stock and the cost are kept per gram." />
+                            </div>
+                        </div>
                         <x-form.textarea name="description" label="Description" :value="$product->description" class="sm:col-span-2" rows="2" />
                     </div>
                 </div>

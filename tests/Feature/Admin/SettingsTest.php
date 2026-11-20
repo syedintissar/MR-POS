@@ -28,7 +28,9 @@ class SettingsTest extends TestCase
     {
         $s = $this->settings();
 
-        $this->assertSame('Mr Printer & Tuner', $s->get('shop.name'));
+        $this->assertSame('MR TECH', $s->get('shop.name'));
+        $this->assertSame('0313-5556182', $s->get('shop.phone'));
+        $this->assertStringContainsString('Taj Mahal Plaza', $s->get('shop.address'));
         $this->assertSame('PKR', $s->get('currency.code'));
         $this->assertSame('Rs.', $s->get('currency.symbol'));
         $this->assertFalse($s->bool('tax.enabled'), 'The shop is not registered for sales tax.');

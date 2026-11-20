@@ -13,6 +13,7 @@ use App\Models\Product;
 use App\Models\ServiceJob;
 use App\Models\ServiceType;
 use App\Models\User;
+use App\Services\Service\ServiceJobService;
 use Illuminate\Support\Facades\URL;
 use Tests\Concerns\ActsAsRoles;
 use Tests\Concerns\MakesStock;
@@ -236,6 +237,43 @@ class ServiceWebTest extends TestCase
         $this->assertSame('5.000', $toner->fresh()->current_stock);
         $this->post("/service/jobs/{$job->id}/lines/{$part->id}/remove", ['disposition' => 'returned_to_stock'])->assertSessionHas('error');
         $this->post('/service/jobs/'.($job->id + 99)."/lines/{$part->id}/remove", [])->assertNotFound();
+    }
+
+    public function test_a_part_bought_outside_is_billed_costed_and_never_touches_the_stock(): void
+    {
+        $toner = $this->stocked('5', '600', ['name' => 'Toner 12A', 'sale_price' => '1500']);
+        $job = $this->job();
+        $this->as('Manager');
+        $this->post("/service/jobs/{$job->id}/status", ['to' => 'diagnosing']);
+        $this->post("/service/jobs/{$job->id}/parts", ['product_id' => $toner->id, 'quantity' => '1'])->assertSessionHas('success');
+        $this->post("/service/jobs/{$job->id}/charges", ['description' => 'Labour', 'unit_price' => '500'])->assertSessionHas('success');
+
+        // bought from the market for 800 each, charged at 1,200 each
+        $this->post("/service/jobs/{$job->id}/charges", [
+            'outside_part' => '1', 'description' => 'Fuser film', 'quantity' => '2', 'unit_cost' => '800', 'unit_price' => '1200', 'outside_source' => 'Saddar market',
+        ])->assertSessionHas('success');
+        $this->post("/service/jobs/{$job->id}/charges", ['outside_part' => '1', 'description' => 'No cost', 'unit_price' => '100'])->assertSessionHasErrors('unit_cost');
+
+        $job->refresh();
+        $line = $job->items()->where('outside_part', true)->sole();
+        $this->assertSame('charge', $line->line_type);
+        $this->assertNull($line->product_id);
+        $this->assertSame('Saddar market', $line->outside_source);
+        $this->assertSame('3900.00', (string) $job->parts_amount, 'the stock part (1,500) and the outside part (2,400)');
+        $this->assertSame('500.00', (string) $job->service_charges, 'only the labour');
+        $this->assertSame('2200.00', (string) $job->parts_cost, 'the stock part cost 600, the outside part 2 x 800');
+        $this->assertSame('4400.00', (string) $job->grand_total);
+        $this->assertSame('4.000', $toner->fresh()->current_stock, 'only the stock part left the shelf');
+
+        $this->get("/service/jobs/{$job->id}")->assertOk()->assertSee('outside part')->assertSee('Fuser film')->assertSee('Saddar market')->assertSee('Add a part bought outside');
+        $this->assertSame([], app(ServiceJobService::class)->findDrift(), 'the nightly check agrees with the figures');
+
+        // taking it off the job needs no stock decision, and its cost goes with it
+        $this->post("/service/jobs/{$job->id}/lines/{$line->id}/remove", [])->assertSessionHas('success');
+        $job->refresh();
+        $this->assertSame('600.00', (string) $job->parts_cost);
+        $this->assertSame('2000.00', (string) $job->grand_total);
+        $this->assertSame('4.000', $toner->fresh()->current_stock);
     }
 
     public function test_a_cashier_cannot_change_parts_or_charges(): void

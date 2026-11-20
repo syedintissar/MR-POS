@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,7 +24,7 @@ class Product extends Model
      * Cost and stock figures are NOT mass-assignable on purpose: only InventoryService may change them.
      */
     protected $fillable = [
-        'type', 'name', 'sku', 'barcode', 'category_id', 'brand_id', 'unit_id', 'model', 'description',
+        'type', 'name', 'sku', 'barcode', 'category_id', 'brand_id', 'unit_id', 'purchase_unit_id', 'purchase_unit_factor', 'model', 'description',
         'sale_price', 'wholesale_price', 'min_sale_price', 'tax_rate', 'min_stock_level', 'rack_location',
         'default_supplier_id', 'warranty_months', 'warranty_terms', 'image_path', 'is_active', 'created_by', 'updated_by',
     ];
@@ -61,6 +62,22 @@ class Product extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);
+    }
+
+    /** The bigger unit the product is bought in (a kilogram packet of toner powder kept and used by the gram), if any. */
+    public function purchaseUnit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class, 'purchase_unit_id');
+    }
+
+    /** @return array{unit: string, name: string, factor: string}|null how the product is bought, for the purchase form */
+    public function pack(): ?array
+    {
+        if ($this->purchase_unit_id === null || $this->purchase_unit_factor === null || ! $this->purchaseUnit) {
+            return null;
+        }
+
+        return ['unit' => $this->purchaseUnit->short_name, 'name' => $this->purchaseUnit->name, 'factor' => Decimal::trim((string) $this->purchase_unit_factor)];
     }
 
     public function defaultSupplier(): BelongsTo

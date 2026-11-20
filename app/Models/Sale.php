@@ -21,7 +21,7 @@ class Sale extends Model
     protected function casts(): array
     {
         return [
-            'sale_date' => 'datetime', 'voided_at' => 'datetime', 'tax_inclusive' => 'boolean', 'print_notes' => 'boolean',
+            'sale_date' => 'datetime', 'due_date' => 'date', 'voided_at' => 'datetime', 'tax_inclusive' => 'boolean', 'print_notes' => 'boolean',
             'items_total' => 'decimal:2', 'line_discount_total' => 'decimal:2', 'invoice_discount_amount' => 'decimal:2',
             'invoice_discount_percent' => 'decimal:2', 'tax_total' => 'decimal:2', 'round_off' => 'decimal:2', 'grand_total' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'returned_amount' => 'decimal:2', 'due_amount' => 'decimal:2',

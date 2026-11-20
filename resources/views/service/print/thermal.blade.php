@@ -50,8 +50,10 @@
     <div class="c">
         @if($logo)<img src="{{ $logo }}" alt="" class="logo">@endif
         <div class="shop">{{ $shop }}</div>
+        @if($s->string('shop.tagline'))<div class="small">{{ $s->string('shop.tagline') }}</div>@endif
         @if($s->string('shop.address'))<div>{{ $s->string('shop.address') }}</div>@endif
         @if($s->string('shop.phone'))<div>Tel: {{ $s->string('shop.phone') }}</div>@endif
+        @if($s->string('shop.email'))<div class="small">{{ $s->string('shop.email') }}</div>@endif
         @if($s->string('shop.ntn') && ! $slip)<div>NTN: {{ $s->string('shop.ntn') }}</div>@endif
     </div>
 

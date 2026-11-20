@@ -307,6 +307,21 @@ class CustomerWebTest extends TestCase
         $this->asWithOnly(['pos.access', 'customers.view'])->postJson('/pos/customers', ['name' => 'Nope'])->assertForbidden();
     }
 
+    public function test_a_manager_adding_a_customer_at_the_till_can_allow_credit_straight_away(): void
+    {
+        $this->as('Manager');
+
+        $r = $this->postJson('/pos/customers', ['name' => 'Credit Kashif', 'phone' => '0303-1112223', 'allow_credit' => true])->assertCreated();
+        $this->assertTrue($r->json('allow_credit'));
+        $this->assertTrue(Customer::query()->findOrFail($r->json('id'))->allow_credit);
+
+        $plain = $this->postJson('/pos/customers', ['name' => 'Cash Kamran'])->assertCreated();
+        $this->assertFalse($plain->json('allow_credit'));
+
+        $this->get('/pos')->assertOk()->assertSee('Selling on')->assertSee('Allow this customer to buy on credit');
+        $this->as('Cashier')->get('/pos')->assertOk()->assertSee('Selling on')->assertDontSee('Allow this customer to buy on credit');
+    }
+
     public function test_the_till_opens_with_a_customer_chosen_on_their_page(): void
     {
         $c = $this->named(['name' => 'Preselected Pari']);

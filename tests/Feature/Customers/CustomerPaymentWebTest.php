@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\User;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\Customers\ReceivablesService;
+use App\Support\WhatsApp;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -316,6 +317,83 @@ class CustomerPaymentWebTest extends TestCase
 
         $this->asWithOnly(['customers.view'])->get('/customer-payments')->assertForbidden();
         $this->as('Manager')->get('/customer-payments?source=all&status=posted&from=2020-01-01&to=2099-01-01&q=RCP')->assertOk();
+    }
+
+    public function test_the_list_shows_what_was_paid_at_the_till_as_well_including_walk_in_sales(): void
+    {
+        $cashier = User::factory()->withRole('Cashier')->create();
+        $sell = fn (?Customer $c, string $price) => app(CompleteSale::class)->execute([
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $c?->id,
+            'lines' => [['product_id' => $this->stocked('50', '10', ['sale_price' => $price])->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => $price]],
+        ], $cashier);
+        $walkIn = $sell(null, '111');
+        $named = $sell($this->customer, '222');
+        $this->invoice('500');
+        $this->as('Manager');
+        $this->collect('40')->assertRedirect();
+
+        // nothing chosen: everything, each till payment pointing at its sale
+        $this->get('/customer-payments')->assertOk()
+            ->assertSee('Sale '.$walkIn->invoice_no)->assertSee('Sale '.$named->invoice_no)->assertSee('111.00')->assertSee('222.00')->assertSee('40.00');
+        $this->get('/customer-payments?source=till')->assertOk()->assertSee('111.00')->assertSee('222.00')->assertDontSee('40.00');
+        $this->get('/customer-payments?source=collected')->assertOk()->assertDontSee('111.00')->assertDontSee('222.00')->assertSee('40.00');
+    }
+
+    public function test_a_credit_sale_keeps_the_date_the_customer_promised_and_the_dashboard_reminds(): void
+    {
+        $p = $this->stocked('50', '10', ['sale_price' => '900']);
+        $this->as('Manager');
+        $promised = now()->addDays(3)->toDateString();
+
+        $r = $this->postJson('/pos/sales', [
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $this->customer->id, 'lines' => [['product_id' => $p->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => '400']], 'due_date' => $promised,
+        ])->assertCreated();
+        $sale = Sale::query()->findOrFail($r->json('sale_id'));
+        $this->assertSame('500.00', (string) $sale->due_amount);
+        $this->assertSame($promised, $sale->due_date->toDateString());
+        $this->postJson('/pos/sales', [
+            'idempotency_key' => (string) Str::uuid(), 'customer_id' => $this->customer->id, 'lines' => [['product_id' => $p->id, 'quantity' => '1']],
+            'due_date' => now()->subDay()->toDateString(),
+        ])->assertStatus(422);
+
+        $this->as('Admin');
+        $this->get('/')->assertOk()->assertSee('Money to collect from customers')->assertSee($sale->invoice_no)->assertSee('in 3 days')->assertSee('Debtor Danish');
+
+        $this->post("/sales/{$sale->id}/due-date", ['due_date' => now()->subDays(2)->toDateString()])->assertSessionHas('success');
+        $this->get('/')->assertOk()->assertSee('overdue 2 days');
+        $this->get("/sales/{$sale->id}")->assertOk()->assertSee('Promised to pay by')->assertSee('overdue');
+
+        // once it is paid it stops being a reminder
+        $this->collect('500')->assertRedirect();
+        $this->get('/')->assertOk()->assertDontSee('Money to collect from customers');
+    }
+
+    public function test_whatsapp_links_carry_the_bill_and_the_reminder_to_the_customers_number(): void
+    {
+        $this->assertSame('923001234567', WhatsApp::number(null, '', '0300-1234567'));
+        $this->assertSame('923001234567', WhatsApp::number('+92 300 1234567'));
+        $this->assertNull(WhatsApp::number('12345', null));
+        $this->assertStringStartsWith('https://wa.me/?text=Hello%20there', WhatsApp::link('Hello there', null));
+
+        $this->customer->forceFill(['phone' => '0300-1234567', 'whatsapp' => '0311 7654321'])->save();
+        $sale = $this->invoice('900');
+        $this->as('Manager');
+
+        $html = $this->get("/sales/{$sale->id}")->assertOk()->assertSee('Send bill on WhatsApp')->assertSee('Remind on WhatsApp')->getContent();
+        $this->assertStringContainsString('https://wa.me/923117654321?text=', $html, 'the WhatsApp number is preferred to the phone number');
+        $this->assertStringContainsString(rawurlencode('Invoice '.$sale->invoice_no), $html);
+        $this->assertStringContainsString(rawurlencode('is still to be paid on invoice '.$sale->invoice_no), $html);
+
+        $this->get("/customers/{$this->customer->id}")->assertOk()->assertSee('Remind on WhatsApp');
+
+        // a paid walk-in sale: the bill can still be sent (WhatsApp asks to whom), there is nothing to remind
+        $walkIn = app(CompleteSale::class)->execute([
+            'idempotency_key' => (string) Str::uuid(), 'lines' => [['product_id' => $this->stocked('50', '10', ['sale_price' => '100'])->id, 'quantity' => '1']],
+            'payments' => [['payment_method_id' => $this->cash()->id, 'amount' => '100']],
+        ], User::factory()->withRole('Cashier')->create());
+        $this->get("/sales/{$walkIn->id}")->assertOk()->assertSee('Send bill on WhatsApp')->assertDontSee('Remind on WhatsApp')->assertSee('https://wa.me/?text=', false);
     }
 
     private function collectedAs(string $role): void

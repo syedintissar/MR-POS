@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Products;
 
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\StockAdjustment;
@@ -421,5 +422,35 @@ class ProductTest extends TestCase
         $this->get("/products/{$p->id}")->assertOk()->assertSee('Recent stock movements')->assertSee('Purchase received');
         $this->get("/products/{$p->id}/edit")->assertOk()->assertSee('Average cost');
         $this->get('/products/999999')->assertNotFound();
+    }
+
+    public function test_the_category_dropdown_offers_each_category_under_its_own_id(): void
+    {
+        $this->as('Manager');
+        // a category made long after the starter list: its id is far from its position in the dropdown
+        $main = Category::query()->create(['name' => 'Photocopiers', 'sort_order' => 0]);
+        $main->forceFill(['id' => 9001])->save();
+        $sub = Category::query()->create(['name' => 'Ricoh', 'parent_id' => 9001]);
+
+        $html = $this->get('/products/create')->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('/<option value="9001"[^>]*>Photocopiers</', $html);
+        $this->assertMatchesRegularExpression('/<option value="'.$sub->id.'"[^>]*>Photocopiers › Ricoh</', $html);
+        foreach (Category::query()->get() as $c) {
+            $this->assertMatchesRegularExpression('/<option value="'.$c->id.'"[^>]*>[^<]*'.preg_quote(e($c->name), '/').'</', $html);
+        }
+    }
+
+    public function test_the_product_list_shows_the_picture_brand_and_model(): void
+    {
+        $this->as('Manager');
+        $brand = Brand::query()->firstOrCreate(['name' => 'Ricoh']);
+        $with = Product::factory()->create(['name' => 'Copier A', 'brand_id' => $brand->id, 'model' => 'MP-2014', 'image_path' => 'products/abc.jpg']);
+        Product::factory()->create(['name' => 'Copier B', 'image_path' => null]);
+
+        $this->get('/products')->assertOk()
+            ->assertSeeInOrder(['<th>Brand</th>', '<th>Model</th>'], false)
+            ->assertSee('MP-2014')->assertSee('Ricoh')
+            ->assertSee(route('products.image', $with), false);
     }
 }
