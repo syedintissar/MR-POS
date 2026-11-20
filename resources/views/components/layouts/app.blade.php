@@ -146,7 +146,10 @@
             {{ $slot }}
         </main>
 
-        <footer class="px-6 py-3 text-xs text-slate-400">{{ $shop }} · MR-POS v{{ config('mrpos.version') }}</footer>
+        <footer class="flex flex-wrap items-center justify-between gap-2 px-6 py-3 text-xs text-slate-400">
+            <span>{{ $shop }} · MR-POS v{{ config('mrpos.version') }}</span>
+            <x-credit />
+        </footer>
     </div>
 </div>
 
