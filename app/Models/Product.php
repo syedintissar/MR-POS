@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -76,7 +77,7 @@ class Product extends Model
             return null;
         }
 
-        return ['unit' => $this->purchaseUnit->short_name, 'name' => $this->purchaseUnit->name, 'factor' => \App\Support\Decimal::trim((string) $this->purchase_unit_factor)];
+        return ['unit' => $this->purchaseUnit->short_name, 'name' => $this->purchaseUnit->name, 'factor' => Decimal::trim((string) $this->purchase_unit_factor)];
     }
 
     public function defaultSupplier(): BelongsTo

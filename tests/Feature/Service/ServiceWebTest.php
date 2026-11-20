@@ -13,6 +13,7 @@ use App\Models\Product;
 use App\Models\ServiceJob;
 use App\Models\ServiceType;
 use App\Models\User;
+use App\Services\Service\ServiceJobService;
 use Illuminate\Support\Facades\URL;
 use Tests\Concerns\ActsAsRoles;
 use Tests\Concerns\MakesStock;
@@ -265,7 +266,7 @@ class ServiceWebTest extends TestCase
         $this->assertSame('4.000', $toner->fresh()->current_stock, 'only the stock part left the shelf');
 
         $this->get("/service/jobs/{$job->id}")->assertOk()->assertSee('outside part')->assertSee('Fuser film')->assertSee('Saddar market')->assertSee('Add a part bought outside');
-        $this->assertSame([], app(\App\Services\Service\ServiceJobService::class)->findDrift(), 'the nightly check agrees with the figures');
+        $this->assertSame([], app(ServiceJobService::class)->findDrift(), 'the nightly check agrees with the figures');
 
         // taking it off the job needs no stock decision, and its cost goes with it
         $this->post("/service/jobs/{$job->id}/lines/{$line->id}/remove", [])->assertSessionHas('success');

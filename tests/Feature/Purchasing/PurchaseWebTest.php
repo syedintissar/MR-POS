@@ -5,6 +5,7 @@ namespace Tests\Feature\Purchasing;
 use App\Actions\Purchasing\PostSupplierPayment;
 use App\Actions\Purchasing\ReceivePurchase;
 use App\Actions\Purchasing\SavePurchaseDraft;
+use App\Models\Category;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -12,6 +13,7 @@ use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierLedgerEntry;
 use App\Models\SupplierPayment;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -66,20 +68,20 @@ class PurchaseWebTest extends TestCase
 
     public function test_a_product_bought_by_the_kilogram_goes_into_stock_in_grams_at_the_cost_per_gram(): void
     {
-        $g = \App\Models\Unit::query()->where('short_name', 'g')->firstOrFail();
-        $kg = \App\Models\Unit::query()->where('short_name', 'kg')->firstOrFail();
+        $g = Unit::query()->where('short_name', 'g')->firstOrFail();
+        $kg = Unit::query()->where('short_name', 'kg')->firstOrFail();
         $this->as('Manager');
 
         // set up through the product form
         $this->post('/products', [
-            'type' => 'stock', 'name' => 'Toner powder HP', 'category_id' => \App\Models\Category::query()->value('id'), 'unit_id' => $g->id,
+            'type' => 'stock', 'name' => 'Toner powder HP', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id,
             'purchase_unit_id' => $kg->id, 'purchase_unit_factor' => '1000', 'sale_price' => '4', 'is_active' => 1,
         ])->assertSessionHasNoErrors();
         $powder = Product::query()->where('name', 'Toner powder HP')->firstOrFail();
         $this->assertSame('1000.000', (string) $powder->purchase_unit_factor);
-        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => \App\Models\Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $g->id, 'purchase_unit_factor' => '5', 'sale_price' => '1'])
+        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $g->id, 'purchase_unit_factor' => '5', 'sale_price' => '1'])
             ->assertSessionHasErrors('purchase_unit_id');
-        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => \App\Models\Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $kg->id, 'sale_price' => '1'])
+        $this->post('/products', ['type' => 'stock', 'name' => 'Bad', 'category_id' => Category::query()->value('id'), 'unit_id' => $g->id, 'purchase_unit_id' => $kg->id, 'sale_price' => '1'])
             ->assertSessionHasErrors('purchase_unit_factor');
         $this->get("/products/{$powder->id}")->assertOk()->assertSee('Bought by the')->assertSee('1 kg = 1000 g');
         $this->getJson('/purchases/lookup?q=Toner+powder')->assertOk()->assertJsonPath('0.pack.unit', 'kg')->assertJsonPath('0.pack.factor', '1000');

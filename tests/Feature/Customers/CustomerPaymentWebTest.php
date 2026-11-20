@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\User;
 use App\Services\Customers\CustomerAccountService;
 use App\Services\Customers\ReceivablesService;
+use App\Support\WhatsApp;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -371,10 +372,10 @@ class CustomerPaymentWebTest extends TestCase
 
     public function test_whatsapp_links_carry_the_bill_and_the_reminder_to_the_customers_number(): void
     {
-        $this->assertSame('923001234567', \App\Support\WhatsApp::number(null, '', '0300-1234567'));
-        $this->assertSame('923001234567', \App\Support\WhatsApp::number('+92 300 1234567'));
-        $this->assertNull(\App\Support\WhatsApp::number('12345', null));
-        $this->assertStringStartsWith('https://wa.me/?text=Hello%20there', \App\Support\WhatsApp::link('Hello there', null));
+        $this->assertSame('923001234567', WhatsApp::number(null, '', '0300-1234567'));
+        $this->assertSame('923001234567', WhatsApp::number('+92 300 1234567'));
+        $this->assertNull(WhatsApp::number('12345', null));
+        $this->assertStringStartsWith('https://wa.me/?text=Hello%20there', WhatsApp::link('Hello there', null));
 
         $this->customer->forceFill(['phone' => '0300-1234567', 'whatsapp' => '0311 7654321'])->save();
         $sale = $this->invoice('900');

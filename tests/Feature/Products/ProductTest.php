@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Products;
 
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\StockAdjustment;
@@ -443,7 +444,7 @@ class ProductTest extends TestCase
     public function test_the_product_list_shows_the_picture_brand_and_model(): void
     {
         $this->as('Manager');
-        $brand = \App\Models\Brand::query()->firstOrCreate(['name' => 'Ricoh']);
+        $brand = Brand::query()->firstOrCreate(['name' => 'Ricoh']);
         $with = Product::factory()->create(['name' => 'Copier A', 'brand_id' => $brand->id, 'model' => 'MP-2014', 'image_path' => 'products/abc.jpg']);
         Product::factory()->create(['name' => 'Copier B', 'image_path' => null]);
 
