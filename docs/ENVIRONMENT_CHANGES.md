@@ -189,3 +189,16 @@ The real `mrpos` database was used for the end-to-end checks (install, real back
 | Database / packages / `.env` | No change (no migration in this phase) |
 | Uploaded backups | A new folder `storage\app\backups\uploaded` is created on first use |
 | MariaDB | Was down after a PC restart and started by hand again; **still waiting for the Windows service** (owner action) |
+---
+
+## 2026-11-21: Phase 10 completion, desktop launcher
+
+| Change | Detail |
+|---|---|
+| New files | `deploy\windows\MR-POS.ps1` (the launcher), `deploy\windows\create-desktop-shortcut.ps1`, `deploy\windows\MR-POS.ico` |
+| Desktop | `C:\Users\SA\Desktop\MR-POS.lnk` created (runs the launcher with PowerShell, uses the POS icon) |
+| Apache | A **second, separate** Apache process is started by the launcher only while its window is open: port **8088**, its own settings `storage\app\apache\httpd.conf` (generated, git-ignored), its own PID file and `storage\logs\apache-error.log`. XAMPP's `httpd.conf` / `httpd-vhosts.conf` were **not edited**; XAMPP's own Apache (port 80, PID 576 at test time) kept running untouched |
+| Marker file | `storage\app\.launcher-installed` (git-ignored) records that first-run setup finished |
+| Real database `mrpos` | Not changed. The trial run checked for pending migrations: none (last batch still 7) |
+| Firewall | Not changed. To let other PCs use port 8088 run `setup-firewall.ps1 -Port 8088` as Administrator |
+| Known, not ours | XAMPP's PHP logs `Unable to load dynamic library 'curl'` in both Apaches (a `php_curl.dll` mismatch in XAMPP); MR-POS does not use curl |

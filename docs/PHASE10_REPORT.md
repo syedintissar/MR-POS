@@ -21,3 +21,18 @@ Headers test (2); report tests (36) after the valuation change; Phase 9 and 8b s
 
 ## 7. Still open (all optional)
 Cloud copy of backups, a midday backup, restore from a web page, and the older questions in the Phase 4 to 8 reports (their defaults are built).
+
+---
+
+## Addendum (2026-11-21): one-click desktop launcher
+
+**Built:** `deploy\windows\create-desktop-shortcut.ps1` draws the POS icon (`MR-POS.ico`) and puts **MR-POS** on the Desktop. The icon runs `deploy\windows\MR-POS.ps1`, which:
+1. on the first run installs what is missing (Composer, npm build, `.env`, key) and caches the views;
+2. starts MariaDB (3308) if it is down;
+3. on a new database runs `pos:install` (the owner types the admin password); after an update with pending migrations it makes a **safety backup first**, then migrates (it stops if the backup fails);
+4. starts a separate Apache for MR-POS on port 8088 with its own generated config, and opens the browser;
+5. when the window is closed (or Q is pressed) Apache stops. MariaDB keeps running.
+
+**Verified on this PC:** first-run path and normal path both brought the site up (`/login` 200, built assets 200, `storage/...` 404); closing the window (a real WM_CLOSE, like the X button) took port 8088 down within a second; XAMPP's own Apache on port 80 kept running; no new Laravel log errors; real database unchanged (no pending migrations).
+
+**Owner action:** for other PCs, run `setup-firewall.ps1 -Port 8088` as Administrator and use `http://<server-ip>:8088`.
