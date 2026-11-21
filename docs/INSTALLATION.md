@@ -128,6 +128,24 @@ BACKUP_VERIFY_DATABASE=mrpos_verify
 `.env` holds secrets. It is never committed to git and is **not** inside backups: keep a copy of the `APP_KEY` line somewhere safe (the Recovery Kit), because stored backup passwords and destination credentials are encrypted with it.
 
 ## 5. Web server and LAN access
+
+### 5.0 The easy way: the MR-POS desktop icon
+1. Once, in PowerShell (no administrator needed): `powershell -ExecutionPolicy Bypass -File D:\MR-POS\deploy\windows\create-desktop-shortcut.ps1`. A blue **POS** icon called **MR-POS** appears on the Desktop.
+2. Double-click it. A window opens and:
+   - **first time only:** installs what is missing (Composer packages, `npm ci` + `npm run build`, `.env` and the security key). Needs the internet once, plus Composer and Node.js installed;
+   - starts MariaDB (port 3308) if it is not running;
+   - **new database:** runs `php artisan pos:install` in the window, where you type the administrator's name and password yourself;
+   - **after a program update** with new database changes: makes a *safety* backup first, then applies them. If the backup fails, nothing is changed;
+   - starts Apache for MR-POS only, on **port 8088**, and opens `http://localhost:8088` in the browser.
+3. **To stop:** close the window, or press **Q** in it. Apache stops with it. MariaDB keeps running, because it is shared and holds the data safely; it stops when the PC shuts down.
+
+Other computers open `http://<server-ip>:8088`. Run the firewall script once for that port (Administrator): `deploy\windows\setup-firewall.ps1 -Port 8088`.
+
+The launcher runs Apache from its own small settings file (`storage\app\apache\httpd.conf`, written on every start), so XAMPP's main Apache and any other project on this PC are never touched. To use another port, change `$Port` at the top of `deploy\windows\MR-POS.ps1`. Apache's messages go to `storage\logs\apache-error.log`.
+
+If the PC should serve the POS all day without anyone logged in, use the permanent setup below instead of the icon.
+
+### 5.1 Permanent setup (Apache as a Windows service, port 80)
 1. Copy the contents of `deploy\windows\httpd-vhosts.mrpos.conf` into `C:\xampp\apache\conf\extra\httpd-vhosts.conf`, change `192.168.1.10` to the Server PC's IP, and make sure `mod_rewrite`, `mod_headers` and the `Include conf/extra/httpd-vhosts.conf` line are active in `httpd.conf`.
 2. Install Apache as a Windows service so it starts with the PC: XAMPP Control Panel → the **Svc** box next to Apache (administrator).
 3. Restart Apache.

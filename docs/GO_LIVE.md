@@ -1,7 +1,7 @@
 # Go-live checklist and data import
 
 ## Before the first real sale
-1. **PC:** MariaDB installed as a Windows service (`deploy\windows\install-mariadb-service.ps1`, as Administrator), the backup scheduled task (`install-scheduler.ps1`), the firewall rule (`setup-firewall.ps1`), a fixed address for the PC. `php artisan pos:doctor` shows all checks OK.
+1. **PC:** MariaDB installed as a Windows service (`deploy\windows\install-mariadb-service.ps1`, as Administrator), the backup scheduled task (`install-scheduler.ps1`), the firewall rule (`setup-firewall.ps1`), a fixed address for the PC. `php artisan pos:doctor` shows all checks OK. For daily use, the **MR-POS desktop icon** (`create-desktop-shortcut.ps1`) starts everything and stops Apache when its window is closed (INSTALLATION.md §5.0; the firewall rule then needs `-Port 8088`).
 2. **`.env`:** `APP_ENV=production`, `APP_DEBUG=false`, the real `APP_URL`. Run `composer install --no-dev --optimize-autoloader`, `npm run build`, `php artisan migrate --force`, `php artisan optimize`.
 3. **Settings:** administrator account created (`php artisan pos:install`); shop name, address, phone, logo and receipt text; the printer tested (a test sale and a return receipt); tax and rounding confirmed; return period (7 days) and restocking fee (off) confirmed; payment methods reviewed.
 4. **Roles:** check what Cashier and Technician can do (Roles & permissions). Cashiers have no cost, profit or expenses.
